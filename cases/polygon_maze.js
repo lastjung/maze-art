@@ -30,6 +30,12 @@ const PolygonMazeCase = {
     searchPaused: false,
     found: false,
     currentIdx: null,
+    
+    // Internal Search Instance for resuming
+    pq: null,
+    costSoFar: null,
+    searchStartedAtMs: 0,
+    searchElapsedMs: 0,
 
     // Config (Mirrored from HexMazeCase)
     config: {
@@ -79,7 +85,7 @@ const PolygonMazeCase = {
                     { value: 'bfs', label: 'Breadth-First Search' },
                     { value: 'dfs', label: 'Depth-First Search' }
                 ],
-                onChange: (v) => { this.config.searchMode = v; this.startSearch(); }
+                onChange: (v) => { this.config.searchMode = v; this.startSearchAnimation(); }
             },
             {
                 type: 'select',
@@ -133,7 +139,7 @@ const PolygonMazeCase = {
     },
 
     reset() {
-        this.stop();
+        this.stopSearchAnimation();
         if (this.width === 0 || this.height === 0) this.resize();
         
         this.generateTopology();
@@ -297,83 +303,116 @@ const PolygonMazeCase = {
         this.searchInProgress = false;
         this.searchPaused = false;
         this.currentIdx = null;
+        this.pq = null;
+        this.costSoFar = null;
+        this.searchStartedAtMs = 0;
+        this.searchElapsedMs = 0;
     },
 
-    startSearch() {
+    startSearchAnimation() {
         if (this.searchInProgress && !this.searchPaused) return;
-        
+
         if (this.searchPaused) {
-            this.searchPaused = false;
-            this.searchInProgress = true;
-            return; // step loop should resume if it was just paused
+            this.resumeSearch();
+            return;
         }
 
         this.clearSearchState();
         this.searchInProgress = true;
+        this.searchStartedAtMs = performance.now();
 
         const start = this.startNodeIdx;
         const goal = this.goalNodeIdx;
 
-        const pq = new PriorityQueue();
-        pq.put(start, 0);
+        this.pq = new PriorityQueue();
+        this.pq.put(start, 0);
 
-        const costSoFar = new Map();
-        costSoFar.set(start, 0);
+        this.costSoFar = new Map();
+        this.costSoFar.set(start, 0);
         this.parentMap.set(start, null);
         this.frontier = [start];
 
-        const step = () => {
-            if (!this.searchInProgress || this.searchPaused || pq.empty()) {
-                if (!this.found && !this.searchPaused) {
-                    this.searchInProgress = false;
-                    MazeEngine.playResultSound(false, this.config);
-                }
-                return;
-            }
+        this.searchStep();
+    },
 
-            const current = pq.get();
-            this.currentIdx = current;
-            this.explored.add(current);
-
-            if (current === goal) {
-                this.found = true;
+    searchStep() {
+        if (!this.searchInProgress || this.searchPaused || !this.pq || this.pq.empty()) {
+            if (!this.found && !this.searchPaused) {
                 this.searchInProgress = false;
-                this.reconstructPath(goal);
-                MazeEngine.playResultSound(true, this.config);
-                if (typeof Core !== 'undefined') {
-                    Core.syncPlayButton();
-                    Core.updateControls();
-                }
-                this.draw();
-                return;
+                this.searchElapsedMs += performance.now() - this.searchStartedAtMs;
+                this.searchStartedAtMs = 0;
+                MazeEngine.playResultSound(false, this.config);
+                if (typeof Core !== 'undefined') Core.syncPlayButton();
             }
+            return;
+        }
 
-            // Sound
-            const dist = Math.sqrt((this.points[current].x - this.points[goal].x)**2 + (this.points[current].y - this.points[goal].y)**2);
-            const freq = 200 + (1 - dist / this.width) * 800;
-            MazeEngine.playTone(freq, 0.05, 'sine', 0.1, 0.003, this.config);
+        const current = this.pq.get();
+        const goal = this.goalNodeIdx;
+        this.currentIdx = current;
+        this.explored.add(current);
 
-            const neighbors = this.neighbors[current].filter(n => {
-                const edgeKey = current < n ? `${current}-${n}` : `${n}-${current}`;
-                return this.openEdges.has(edgeKey);
-            });
-
-            for (const next of neighbors) {
-                const newCost = costSoFar.get(current) + 1;
-                if (!costSoFar.has(next) || newCost < costSoFar.get(next)) {
-                    costSoFar.set(next, newCost);
-                    const priority = newCost + Math.sqrt((this.points[next].x - this.points[goal].x)**2 + (this.points[next].y - this.points[goal].y)**2) / 10;
-                    pq.put(next, priority);
-                    this.parentMap.set(next, current);
-                    if (!this.frontier.includes(next)) this.frontier.push(next);
-                }
+        if (current === goal) {
+            this.found = true;
+            this.searchInProgress = false;
+            this.searchElapsedMs += performance.now() - this.searchStartedAtMs;
+            this.searchStartedAtMs = 0;
+            this.reconstructPath(goal);
+            MazeEngine.playResultSound(true, this.config);
+            if (typeof Core !== 'undefined') {
+                Core.syncPlayButton();
+                Core.updateControls();
             }
-
             this.draw();
-            setTimeout(step, MazeEngine.speedToDelay(this.config.speed));
-        };
+            return;
+        }
 
-        step();
+        // Sound
+        const dist = Math.sqrt((this.points[current].x - this.points[goal].x)**2 + (this.points[current].y - this.points[goal].y)**2);
+        const freq = 200 + (1 - dist / this.width) * 800;
+        MazeEngine.playTone(freq, 0.05, 'sine', 0.1, 0.003, this.config);
+
+        const neighbors = this.neighbors[current].filter(n => {
+            const edgeKey = current < n ? `${current}-${n}` : `${n}-${current}`;
+            return this.openEdges.has(edgeKey);
+        });
+
+        for (const next of neighbors) {
+            const newCost = this.costSoFar.get(current) + 1;
+            if (!this.costSoFar.has(next) || newCost < this.costSoFar.get(next)) {
+                this.costSoFar.set(next, newCost);
+                const priority = newCost + Math.sqrt((this.points[next].x - this.points[goal].x)**2 + (this.points[next].y - this.points[goal].y)**2) / 10;
+                this.pq.put(next, priority);
+                this.parentMap.set(next, current);
+                if (!this.frontier.includes(next)) this.frontier.push(next);
+            }
+        }
+
+        this.draw();
+        this.searchTimeout = setTimeout(() => this.searchStep(), MazeEngine.speedToDelay(this.config.speed));
+    },
+
+    pauseSearch() {
+        this.searchPaused = true;
+        this.searchElapsedMs += performance.now() - this.searchStartedAtMs;
+        this.searchStartedAtMs = 0;
+        clearTimeout(this.searchTimeout);
+        if (typeof Core !== 'undefined') Core.syncPlayButton();
+    },
+
+    resumeSearch() {
+        if (!this.searchInProgress || !this.searchPaused) return;
+        this.searchPaused = false;
+        this.searchStartedAtMs = performance.now();
+        if (typeof Core !== 'undefined') Core.syncPlayButton();
+        this.searchStep();
+    },
+
+    stopSearchAnimation() {
+        this.searchInProgress = false;
+        this.searchPaused = false;
+        clearTimeout(this.searchTimeout);
+        if (typeof Core !== 'undefined') Core.syncPlayButton();
     },
 
     reconstructPath(goal) {
@@ -471,12 +510,16 @@ const PolygonMazeCase = {
         return shared;
     },
 
+    autoPlayOnReset: false,
+    startPausedOnLoad: true,
+
     start() { 
-        if (this.found) this.reset(); // If already solved, generate new
-        this.startSearch(); 
+        if (this.found) this.reset(); 
+        if (this.searchPaused) this.resumeSearch();
+        else this.startSearchAnimation();
     },
-    stop() { this.searchPaused = true; },
-    destroy() { this.searchInProgress = false; }
+    stop() { this.pauseSearch(); },
+    destroy() { this.stopSearchAnimation(); }
 };
 
 window.PolygonMazeCase = PolygonMazeCase;
