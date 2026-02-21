@@ -18,6 +18,7 @@
             <div class="tab" data-case="fibonacci-maze">Fibonacci Maze</div>
             <div class="tab" data-case="circular">Circular Obstacles</div>
             <div class="tab" data-case="polygon-map">Polygon Map</div>
+            <div class="tab" data-case="polygon-maze">Polygon Maze</div>
           </div>
         </div>
       </nav>
@@ -57,6 +58,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
     <script src="cases/circular_pathfinding.js"></script>
     <script src="cases/polygon_map.js"></script>
+    <script src="cases/polygon_maze.js"></script>
     <script>
       document.querySelectorAll('.tab').forEach(tab => {
         tab.addEventListener('click', () => {
@@ -80,6 +82,10 @@
             document.getElementById('main-title').textContent = 'Polygonal Map Generation';
             document.getElementById('main-subtitle').textContent = 'Generate island maps with polygon cells.';
             Core.loadCase(PolygonMapCase, { mode: 'interactive' });
+          } else if (caseName === 'polygon-maze') {
+            document.getElementById('main-title').textContent = 'Polygonal Voronoi Maze';
+            document.getElementById('main-subtitle').textContent = 'Maze solving on an irregular polygonal grid.';
+            Core.loadCase(PolygonMazeCase, { mode: 'interactive' });
           }
         });
       });
