@@ -11,13 +11,13 @@
 
 ## 실행 방법
 
-### 로컬 개발 서버용 (npm)
+### 로컬 개발 서버용 (pnpm)
 
 독립적인 실행을 위해 `serve` 패키지를 사용합니다.
 
 ```bash
-npm install
-npm run dev
+pnpm install
+pnpm dev
 ```
 
 브라우저 접속: [http://localhost:3000](http://localhost:3000)
