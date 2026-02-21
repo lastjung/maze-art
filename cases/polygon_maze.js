@@ -22,7 +22,7 @@ const PolygonMazeCase = {
     // Search State
     startNodeIdx: null,
     goalNodeIdx: null,
-    frontier: [], // Array for visualization order
+    frontier: [],
     explored: new Set(),
     parentMap: new Map(),
     path: [],
@@ -37,6 +37,7 @@ const PolygonMazeCase = {
     searchStartedAtMs: 0,
     searchElapsedMs: 0,
     searchTimeout: null,
+    lastEnteredNodeCount: 0,
 
     // Config (Mirrored from HexMazeCase)
     config: {
@@ -83,11 +84,11 @@ const PolygonMazeCase = {
                 options: [
                     { value: 'astar', label: 'A*' },
                     { value: 'dijkstra', label: 'Dijkstra' },
-                    { value: 'greedy', label: 'Greedy Best-First' },
-                    { value: 'bfs', label: 'Breadth-First Search' },
-                    { value: 'dfs', label: 'Depth-First Search' }
+                    { value: 'greedy', label: 'Greedy' },
+                    { value: 'bfs', label: 'BFS' },
+                    { value: 'dfs', label: 'DFS' }
                 ],
-                onChange: (v) => { this.config.searchMode = v; this.startSearchAnimation(); }
+                onChange: (v) => { this.config.searchMode = v; this.triggerSearch(); }
             },
             {
                 type: 'select',
@@ -309,7 +310,22 @@ const PolygonMazeCase = {
         this.costSoFar = null;
         this.searchStartedAtMs = 0;
         this.searchElapsedMs = 0;
+        this.lastEnteredNodeCount = 0;
         if (this.searchTimeout) clearTimeout(this.searchTimeout);
+
+        if (typeof Core !== 'undefined') {
+            Core.syncPlayButton();
+            Core.updateControls();
+        }
+    },
+
+    triggerSearch() {
+        if (typeof Core !== 'undefined' && Core.isRunning) {
+            this.startSearchAnimation();
+        } else {
+            this.clearSearchState();
+            this.draw();
+        }
     },
 
     startSearchAnimation() {
@@ -335,12 +351,13 @@ const PolygonMazeCase = {
         this.parentMap.set(start, null);
         this.frontier = [start];
 
+        if (typeof Core !== 'undefined') Core.syncPlayButton();
         this.searchStep();
     },
 
     searchStep() {
         if (!this.searchInProgress || this.searchPaused || !this.pq || this.pq.empty()) {
-            if (!this.found && !this.searchPaused) {
+            if (!this.found && !this.searchPaused && this.searchInProgress) {
                 this.searchInProgress = false;
                 this.searchElapsedMs += performance.now() - this.searchStartedAtMs;
                 this.searchStartedAtMs = 0;
@@ -360,6 +377,7 @@ const PolygonMazeCase = {
             this.searchInProgress = false;
             this.searchElapsedMs += performance.now() - this.searchStartedAtMs;
             this.searchStartedAtMs = 0;
+            this.lastEnteredNodeCount = this.explored.size;
             this.reconstructPath(goal);
             MazeEngine.playResultSound(true, this.config);
             if (typeof Core !== 'undefined') {
@@ -384,7 +402,16 @@ const PolygonMazeCase = {
             const newCost = this.costSoFar.get(current) + 1;
             if (!this.costSoFar.has(next) || newCost < this.costSoFar.get(next)) {
                 this.costSoFar.set(next, newCost);
-                const priority = newCost + Math.sqrt((this.points[next].x - this.points[goal].x)**2 + (this.points[next].y - this.points[goal].y)**2) / 10;
+                
+                let priority = newCost;
+                if (this.config.searchMode === 'astar') {
+                    priority += Math.sqrt((this.points[next].x - this.points[goal].x)**2 + (this.points[next].y - this.points[goal].y)**2) / 4;
+                } else if (this.config.searchMode === 'greedy') {
+                    priority = Math.sqrt((this.points[next].x - this.points[goal].x)**2 + (this.points[next].y - this.points[goal].y)**2);
+                } else if (this.config.searchMode === 'bfs' || this.config.searchMode === 'dfs') {
+                    priority = 0; // Standard Queue/Stack behavior implicitly handled by PQ if same priority, but DFS needs careful handling
+                }
+                
                 this.pq.put(next, priority);
                 this.parentMap.set(next, current);
                 if (!this.frontier.includes(next)) this.frontier.push(next);
@@ -396,6 +423,7 @@ const PolygonMazeCase = {
     },
 
     pauseSearch() {
+        if (!this.searchInProgress) return;
         this.searchPaused = true;
         this.searchElapsedMs += performance.now() - this.searchStartedAtMs;
         this.searchStartedAtMs = 0;
@@ -429,9 +457,9 @@ const PolygonMazeCase = {
 
     draw() {
         if (!this.ctx) return;
-        const theme = MazeEngine.themes[this.config.theme];
+        const theme = MazeEngine.themes[this.config.theme] || MazeEngine.themes.ocean;
         this.ctx.clearRect(0, 0, this.width, this.height);
-        this.ctx.fillStyle = '#0f172a';
+        this.ctx.fillStyle = '#1e1e1e';
         this.ctx.fillRect(0, 0, this.width, this.height);
 
         // 1. Draw Polygons
@@ -446,17 +474,17 @@ const PolygonMazeCase = {
             this.ctx.closePath();
 
             // Fill based on search state
+            let fill = 'rgba(240, 248, 255, 0.05)';
             if (this.path.includes(i)) {
-                this.ctx.fillStyle = theme.path;
+                fill = theme.path;
             } else if (i === this.currentIdx) {
-                this.ctx.fillStyle = theme.current;
+                fill = theme.current;
             } else if (this.explored.has(i)) {
-                this.ctx.fillStyle = theme.explored;
+                fill = theme.explored;
             } else if (this.frontier.includes(i)) {
-                this.ctx.fillStyle = theme.frontier;
-            } else {
-                this.ctx.fillStyle = 'transparent';
+                fill = theme.frontier;
             }
+            this.ctx.fillStyle = fill;
             this.ctx.fill();
 
             // Draw Walls (Edges that are NOT in openEdges)
@@ -497,6 +525,35 @@ const PolygonMazeCase = {
             }
             this.ctx.stroke();
         }
+
+        this.drawScoreboard();
+    },
+
+    formatMs(ms) {
+        const value = Math.max(0, ms || 0);
+        const totalSec = value / 1000;
+        const min = Math.floor(totalSec / 60);
+        const sec = Math.floor(totalSec % 60);
+        const centi = Math.floor((value % 1000) / 10);
+        return `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}.${String(centi).padStart(2, '0')}`;
+    },
+
+    drawScoreboard() {
+        const ctx = this.ctx;
+        const liveMs = this.searchInProgress && this.searchStartedAtMs > 0
+            ? performance.now() - this.searchStartedAtMs + this.searchElapsedMs
+            : this.searchElapsedMs;
+        
+        ctx.save();
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = '600 13px Inter, sans-serif';
+        ctx.fillText(`Algorithm: ${this.config.searchMode.toUpperCase()}`, 20, 30);
+        ctx.font = '500 12px Inter, sans-serif';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.fillText(`Time: ${this.formatMs(liveMs)}`, 20, 50);
+        ctx.fillText(`Cells Entered: ${this.explored.size}`, 20, 70);
+        ctx.fillText(`Last: ${this.lastEnteredNodeCount}`, 20, 90);
+        ctx.restore();
     },
 
     getSharedVertices(idx1, idx2) {
@@ -513,16 +570,23 @@ const PolygonMazeCase = {
         return shared;
     },
 
-    autoPlayOnReset: false,
     startPausedOnLoad: true,
+    autoPlayOnReset: false,
 
     start() { 
         if (this.found) this.reset(); 
         if (this.searchPaused) this.resumeSearch();
         else this.startSearchAnimation();
     },
-    stop() { this.pauseSearch(); },
-    destroy() { this.stopSearchAnimation(); }
+
+    stop() { 
+        if (this.searchInProgress) this.pauseSearch();
+        else this.stopSearchAnimation();
+    },
+
+    destroy() { 
+        this.stopSearchAnimation(); 
+    }
 };
 
 window.PolygonMazeCase = PolygonMazeCase;
