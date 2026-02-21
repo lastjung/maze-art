@@ -22,7 +22,7 @@ const PolygonMazeCase = {
     // Search State
     startNodeIdx: null,
     goalNodeIdx: null,
-    frontier: [],
+    frontier: [], // Array for visualization order
     explored: new Set(),
     parentMap: new Map(),
     path: [],
@@ -30,12 +30,13 @@ const PolygonMazeCase = {
     searchPaused: false,
     found: false,
     currentIdx: null,
-    
-    // Internal Search Instance for resuming
+
+    // Internal Search Instance for resuming (Must be members to support Pause/Resume)
     pq: null,
     costSoFar: null,
     searchStartedAtMs: 0,
     searchElapsedMs: 0,
+    searchTimeout: null,
 
     // Config (Mirrored from HexMazeCase)
     config: {
@@ -61,6 +62,7 @@ const PolygonMazeCase = {
         const parent = this.canvas.parentElement;
         this.width = this.canvas.width = parent.clientWidth || 800;
         this.height = this.canvas.height = parent.clientHeight || 600;
+        this.draw();
     },
 
     get uiConfig() {
@@ -307,6 +309,7 @@ const PolygonMazeCase = {
         this.costSoFar = null;
         this.searchStartedAtMs = 0;
         this.searchElapsedMs = 0;
+        if (this.searchTimeout) clearTimeout(this.searchTimeout);
     },
 
     startSearchAnimation() {
@@ -396,7 +399,7 @@ const PolygonMazeCase = {
         this.searchPaused = true;
         this.searchElapsedMs += performance.now() - this.searchStartedAtMs;
         this.searchStartedAtMs = 0;
-        clearTimeout(this.searchTimeout);
+        if (this.searchTimeout) clearTimeout(this.searchTimeout);
         if (typeof Core !== 'undefined') Core.syncPlayButton();
     },
 
@@ -411,7 +414,7 @@ const PolygonMazeCase = {
     stopSearchAnimation() {
         this.searchInProgress = false;
         this.searchPaused = false;
-        clearTimeout(this.searchTimeout);
+        if (this.searchTimeout) clearTimeout(this.searchTimeout);
         if (typeof Core !== 'undefined') Core.syncPlayButton();
     },
 
