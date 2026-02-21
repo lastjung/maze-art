@@ -1,0 +1,798 @@
+/* Brilliant-Style Design System for Math Visualization */
+:root {
+  /* Colors */
+  --brilliant-green: #29cc57;
+  --brilliant-green-dark: #009b2b;
+  --brilliant-bg-soft: #eef4ff;
+  --brilliant-text-primary: #000000;
+  --brilliant-text-muted: #555555;
+  --white: #ffffff;
+  --deep-blue: #27455c;
+
+  /* Fonts */
+  --font-heading: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-body: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+
+  /* Layout */
+  --radius-pill: 48px;
+  --radius-card: 20px;
+  --shadow-tactile: 0px 4px 0px 0px var(--brilliant-green-dark);
+  --shadow-soft: 0px 8px 30px rgba(0, 0, 0, 0.08);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--brilliant-bg-soft);
+  color: var(--brilliant-text-primary);
+  font-family: var(--font-body);
+  line-height: 1.6;
+  overflow-x: hidden;
+  /* Center Content */
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Layout Containers */
+.container {
+  max-width: 95vw;
+  width: 100%;
+  margin: 0 auto;
+  padding: 40px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 32px;
+}
+
+/* Header Section */
+header {
+  text-align: center;
+  max-width: 800px;
+}
+
+h1 {
+  font-family: var(--font-heading);
+  font-size: 2.2rem;
+  font-weight: 700;
+  line-height: 1.2;
+  margin-bottom: 12px;
+  color: var(--deep-blue);
+}
+
+p.subtitle {
+  font-size: 1.05rem;
+  color: var(--brilliant-text-muted);
+}
+
+/* Case Selection Tabs */
+.case-tabs {
+    width: 100%;
+    max-width: 980px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 12px;
+    position: sticky;
+    top: 10px;
+    z-index: 20;
+}
+
+.tab-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255, 255, 255, 0.88);
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 8px 10px;
+    backdrop-filter: blur(8px);
+}
+
+.group-label {
+    min-width: 84px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--brilliant-text-muted);
+}
+
+.tab-row {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    scrollbar-width: thin;
+    padding-bottom: 2px;
+}
+
+.tab {
+    padding: 10px 14px;
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    background: var(--white);
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.82rem;
+    line-height: 1;
+    white-space: nowrap;
+    color: var(--deep-blue);
+    border: 1px solid #e2e8f0;
+    transition: all 0.2s;
+}
+
+.tab.active {
+    background: var(--brilliant-green);
+    color: var(--white);
+    border-color: var(--brilliant-green);
+    box-shadow: 0px 4px 0px 0px var(--brilliant-green-dark);
+}
+
+.tab:hover:not(.active) {
+    background: #f8fafc;
+}
+
+/* Main Dashboard Card */
+.dashboard-card {
+  background: var(--white);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-soft);
+  width: 100%;
+  padding: 32px;
+  display: flex; /* Default for mobile */
+  flex-direction: column;
+  gap: 32px;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+
+/* Visualization Canvas Area */
+.canvas-container {
+  background: #fcfdff;
+  border-radius: 12px;
+  border: 2px dashed #e0e7ff;
+  position: relative;
+  height: 75vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+}
+
+canvas {
+  width: 100%;
+  height: 100%;
+}
+
+/* Control Holders */
+.controls-shell {
+  display: none;
+}
+
+.controls {
+  display: none;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.controls.active {
+  display: flex;
+}
+
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.control-group label {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--deep-blue);
+}
+
+/* Custom Range Input Style */
+input[type=range] {
+  -webkit-appearance: none;
+  width: 100%;
+  background: transparent;
+  margin: 10px 0;
+}
+
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  height: 18px;
+  width: 18px;
+  border-radius: 50%;
+  background: #29cc57;
+  cursor: pointer;
+  margin-top: -7px;
+  box-shadow: 0 2px 6px rgba(41, 204, 87, 0.4);
+  border: 2px solid #fff;
+  transition: transform 0.1s;
+}
+
+input[type=range]::-webkit-slider-thumb:hover {
+    transform: scale(1.1);
+}
+
+input[type=range]::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 4px;
+  cursor: pointer;
+  background: rgba(0,0,0,0.05);
+  border-radius: 2px;
+  border: 1px solid rgba(0,0,0,0.02);
+}
+
+input[type=range]:focus {
+  outline: none;
+}
+
+
+/* Brilliant Style Buttons */
+.btn-primary {
+  background-color: var(--brilliant-green);
+  color: var(--white);
+  border: none;
+  border-radius: var(--radius-pill);
+  padding: 14px 28px;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+  box-shadow: var(--shadow-tactile);
+  transition:
+    transform 0.1s,
+    box-shadow 0.1s;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.btn-primary:active {
+  transform: translateY(2px);
+  box-shadow: 0px 2px 0px 0px var(--brilliant-green-dark);
+}
+
+.btn-secondary {
+  background: transparent;
+  border: 2px solid #e2e8f0;
+  color: var(--deep-blue);
+  border-radius: var(--radius-pill);
+  padding: 12px 24px;
+  font-family: var(--font-body);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+}
+
+.btn-secondary:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+/* Recording Mode Styles (for YouTube) */
+body.recording-mode .dashboard-card {
+  grid-template-columns: 1fr;
+  padding: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+body.recording-mode .controls,
+body.recording-mode header,
+body.recording-mode .btn-secondary {
+  display: none;
+}
+
+body.recording-mode .canvas-container {
+  border: none;
+  background: var(--brilliant-bg-soft);
+}
+
+/* Responsive for Shorts (Vertical View) */
+@media (max-width: 768px) {
+  body {
+    display: block;
+    min-height: auto;
+    height: auto;
+    overflow-y: auto;
+  }
+
+  .container {
+    max-width: 100vw;
+    width: 100%;
+    margin: 0;
+    padding: 12px 10px;
+    gap: 14px;
+    align-items: stretch;
+  }
+
+  .case-tabs {
+    position: static;
+    order: 3;
+    top: auto;
+    max-width: 100%;
+    gap: 8px;
+    margin-top: 10px;
+    margin-bottom: 0;
+  }
+
+  #header {
+    order: 1;
+  }
+
+  .dashboard-card {
+    order: 2;
+    grid-template-columns: 1fr;
+    padding: 12px;
+    gap: 12px;
+    border-radius: 14px;
+  }
+
+  .tab-group {
+    display: block;
+    padding: 8px;
+  }
+
+  .group-label {
+    display: block;
+    min-width: 0;
+    margin-bottom: 6px;
+    font-size: 0.72rem;
+  }
+
+  .tab-row {
+    gap: 6px;
+  }
+
+  .tab {
+    padding: 9px 12px;
+    height: 34px;
+    font-size: 0.78rem;
+  }
+
+  h1 {
+    font-size: 1.55rem;
+    line-height: 1.25;
+  }
+
+  p.subtitle {
+    font-size: 0.95rem;
+  }
+
+  .canvas-container {
+    height: auto;
+    aspect-ratio: 1 / 1;
+    max-height: 86vw;
+    border-width: 1px;
+    border-style: solid;
+    border-color: #e5e7eb;
+    border-radius: 10px;
+  }
+
+  .controls {
+    display: none !important;
+  }
+
+  #floating-dock-container {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1024px) {
+  body {
+    display: block;
+    min-height: 100vh;
+  }
+
+  .container {
+    max-width: 100%;
+    padding: 24px 18px;
+    gap: 20px;
+    align-items: stretch;
+  }
+
+  .case-tabs {
+    position: static;
+    max-width: 100%;
+    gap: 10px;
+    margin-bottom: 0;
+  }
+
+  .dashboard-card {
+    grid-template-columns: 1fr;
+    padding: 18px;
+    gap: 18px;
+    border-radius: 16px;
+  }
+
+  .canvas-container {
+    height: clamp(420px, 62vh, 620px);
+  }
+
+  .controls {
+    display: none !important;
+  }
+
+  #floating-dock-container {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+}
+
+@media (min-width: 1025px) {
+  .dashboard-card {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+  }
+
+  .canvas-container {
+    height: clamp(460px, 64vh, 700px);
+  }
+
+  .controls-shell {
+    display: block;
+    border-left: 1px solid #edf2f7;
+    padding-left: 32px;
+    min-width: 340px;
+  }
+
+  .controls {
+    display: none !important;
+  }
+
+  .controls.active {
+    display: flex !important;
+  }
+
+  #floating-dock-container,
+  #settings-panel {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+  }
+}
+
+/* Sleep Mode Overlay */
+#sleep-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(41, 204, 87, 0.1);
+  backdrop-filter: blur(10px);
+  z-index: 9999;
+  display: none;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  text-align: center;
+}
+
+.sleep-content {
+  background: var(--white);
+  padding: 40px;
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-soft);
+}
+
+.sleep-content h2 {
+  font-family: var(--font-heading);
+  color: var(--brilliant-green);
+  font-size: 2.5rem;
+  margin-bottom: 20px;
+}
+
+.sleep-content p {
+  font-size: 1.1rem;
+  color: var(--brilliant-text-muted);
+  margin-bottom: 30px;
+}
+
+/* UI Toggle & Fullscreen Mode */
+body.hide-ui .case-tabs,
+body.hide-ui #header,
+body.hide-ui .controls {
+    display: none !important;
+}
+
+body.hide-ui .container {
+    max-width: 100%;
+    padding: 0;
+    margin: 0;
+    height: 100vh;
+}
+
+body.hide-ui main.dashboard-card {
+    background: #000;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+    height: 100vh;
+    width: 100vw;
+    display: block; /* Override grid */
+}
+
+body.hide-ui .canvas-container {
+    width: 100vw;
+    height: 100vh;
+    border-radius: 0;
+    border: none;
+    margin: 0;
+    max-height: none; 
+}
+
+/* Floating Toggle Button */
+#ui-toggle-btn {
+    display: none;
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 10000;
+    padding: 10px 16px;
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    cursor: pointer;
+    backdrop-filter: blur(4px);
+    font-family: var(--font-body);
+    font-size: 0.8rem;
+    transition: all 0.3s ease;
+}
+
+#ui-toggle-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: #fff;
+}
+
+body.hide-ui #ui-toggle-btn {
+    display: block;
+    opacity: 0.85;
+}
+body.hide-ui #ui-toggle-btn:hover {
+    opacity: 1;
+}
+
+/* --- Universal Controls (Floating Dock & Settings) --- */
+
+/* Settings Panel */
+#settings-panel {
+    position: fixed;
+    bottom: 100px;
+    left: 50%;
+    transform: translate(-50%, 20px);
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.3s ease;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    padding: 24px;
+    border-radius: 24px;
+    width: 320px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+#settings-panel.visible {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translate(-50%, 0);
+}
+
+.setting-item {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 2px;
+}
+
+.setting-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: #333;
+}
+
+.setting-header label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.setting-value {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: var(--brilliant-green);
+    font-weight: 700;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.setting-item-info {
+    border: 1px solid #e7edf4;
+    border-radius: 12px;
+    background: #fbfdff;
+    padding: 10px 12px;
+    gap: 2px;
+}
+
+.setting-info-label {
+    font-size: 0.86rem;
+    font-weight: 700;
+    color: #2f3640;
+    line-height: 1.25;
+}
+
+.setting-info-value {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.86rem;
+    font-weight: 700;
+    color: var(--brilliant-green);
+    letter-spacing: 0.01em;
+}
+
+.controls::-webkit-scrollbar {
+    width: 8px;
+}
+
+.controls::-webkit-scrollbar-thumb {
+    background: #d7e4d7;
+    border-radius: 999px;
+}
+
+.setting-select {
+    width: 100%;
+    padding: 10px;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    font-family: inherit;
+    font-size: 0.9rem;
+    color: var(--deep-blue);
+    cursor: pointer;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.setting-select:focus {
+    border-color: var(--brilliant-green);
+}
+
+/* Floating Dock */
+#floating-dock-container {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translate(-50%, 0);
+    z-index: 1001;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    background: rgba(30, 30, 40, 0.85);
+    backdrop-filter: blur(20px);
+    padding: 12px 20px;
+    border-radius: 50px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+    transition: opacity 0.3s;
+}
+
+.dock-divider {
+    width: 1px;
+    height: 20px;
+    background: rgba(255,255,255,0.2);
+    margin: 0 4px;
+}
+
+/* Icon Buttons in Dock */
+.icon-btn {
+    background: rgba(255,255,255,0.1);
+    border: none;
+    color: white;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 1.2rem;
+    transition: all 0.2s;
+}
+
+.icon-btn:hover {
+    background: rgba(255,255,255,0.2);
+    transform: scale(1.05);
+}
+
+.icon-btn:active {
+    transform: scale(0.95);
+}
+
+/* Play/Pause Button */
+.play-btn {
+    background: linear-gradient(135deg, #29cc57, #009b2b);
+    color: white;
+    border: none;
+    border-radius: 30px;
+    padding: 0 24px;
+    height: 44px;
+    font-weight: 700;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(41, 204, 87, 0.4);
+    transition: transform 0.1s, background 0.3s;
+}
+
+.play-btn.paused {
+    background: linear-gradient(135deg, #ffb74d, #f57c00);
+    box-shadow: 0 4px 15px rgba(245, 124, 0, 0.4);
+}
+
+.play-btn:active {
+    transform: scale(0.95);
+}
+
+/* Responsive Visibility for Universal Controls */
+
+/* Hide UI Logic */
+body.hide-ui #floating-dock-container,
+body.hide-ui #settings-panel {
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Formula Overlay for KaTeX */
+.formula-overlay {
+    position: absolute;
+    top: 40px;
+    left: 40px;
+    z-index: 10;
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(10px);
+    padding: 15px 25px;
+    border-radius: 12px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+    border: 1px solid rgba(0, 0, 0, 0.03);
+    pointer-events: none;
+    transition: all 0.3s ease;
+    display: none; /* Hidden by default, shown when case loads */
+}
+
+.formula-overlay.active {
+    display: block;
+}
+
+.katex {
+    font-size: 1.2em !important;
+}

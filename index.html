@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Maze Art</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <div class="container">
+      <nav class="case-tabs">
+        <div class="tab-group" data-group="interactive">
+          <span class="group-label">Interactive</span>
+          <div class="tab-row">
+            <div class="tab active" data-case="hex-maze">Hexagon Maze</div>
+            <div class="tab" data-case="fibonacci-maze">Fibonacci Maze</div>
+            <div class="tab" data-case="circular">Circular Obstacles</div>
+            <div class="tab" data-case="polygon-map">Polygon Map</div>
+          </div>
+        </div>
+      </nav>
+
+      <header id="header">
+        <h1 id="main-title">Hexagon Maze</h1>
+        <p class="subtitle" id="main-subtitle">Find the shortest path in a hex maze.</p>
+      </header>
+
+      <main class="dashboard-card">
+        <div class="canvas-container" id="capture-zone">
+          <div id="formula-overlay" class="formula-overlay"></div>
+          <canvas id="mathCanvas"></canvas>
+        </div>
+
+        <aside class="controls-shell">
+          <section id="display-controls" class="controls" data-mode="display"></section>
+          <section id="interactive-controls" class="controls active" data-mode="interactive"></section>
+        </aside>
+      </main>
+    </div>
+
+    <div id="sleep-overlay">
+      <div class="sleep-content">
+        <h2>Deep Sleep Mode</h2>
+        <p>System paused due to inactivity.<br>Move mouse or click to resume.</p>
+        <div class="btn-primary" onclick="Core.resetIdleTimer()">Resume Activity</div>
+      </div>
+    </div>
+
+    <script src="audio.js"></script>
+    <script src="core.js"></script>
+    <script src="cases/maze_engine.js"></script>
+    <script src="cases/hex_maze.js"></script>
+    <script src="cases/fibonacci_maze.js"></script>
+    <script src="https://unpkg.com/delaunator@5.0.0/delaunator.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
+    <script src="cases/circular_pathfinding.js"></script>
+    <script src="cases/polygon_map.js"></script>
+    <script>
+      document.querySelectorAll('.tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+          document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+          tab.classList.add('active');
+
+          const caseName = tab.getAttribute('data-case');
+          if (caseName === 'hex-maze') {
+            document.getElementById('main-title').textContent = 'Hexagon Maze';
+            document.getElementById('main-subtitle').textContent = 'Find the shortest path in a hex grid.';
+            Core.loadCase(HexMazeCase, { mode: 'interactive' });
+          } else if (caseName === 'fibonacci-maze') {
+            document.getElementById('main-title').textContent = 'Fibonacci Hex Maze';
+            document.getElementById('main-subtitle').textContent = 'Pathfinding through golden angle seeds.';
+            Core.loadCase(FibonacciMazeCase, { mode: 'interactive' });
+          } else if (caseName === 'circular') {
+            document.getElementById('main-title').textContent = 'Circular Obstacle Pathfinding';
+            document.getElementById('main-subtitle').textContent = 'Find a path around round obstacles.';
+            Core.loadCase(CircularPathfindingCase, { mode: 'interactive' });
+          } else if (caseName === 'polygon-map') {
+            document.getElementById('main-title').textContent = 'Polygonal Map Generation';
+            document.getElementById('main-subtitle').textContent = 'Generate island maps with polygon cells.';
+            Core.loadCase(PolygonMapCase, { mode: 'interactive' });
+          }
+        });
+      });
+
+      window.onload = () => {
+        if (typeof HexMazeCase !== 'undefined') {
+          Core.loadCase(HexMazeCase, { mode: 'interactive' });
+        } else {
+          console.error('HexMazeCase failed to load!');
+        }
+      };
+    </script>
+  </body>
+</html>
