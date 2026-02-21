@@ -26,7 +26,8 @@ const PolygonMazeCase = {
     explored: new Set(),
     parentMap: new Map(),
     path: [],
-    isSearching: false,
+    searchInProgress: false,
+    searchPaused: false,
     found: false,
     currentIdx: null,
 
@@ -293,14 +294,22 @@ const PolygonMazeCase = {
         this.parentMap.clear();
         this.path = [];
         this.found = false;
-        this.isSearching = false;
+        this.searchInProgress = false;
+        this.searchPaused = false;
         this.currentIdx = null;
     },
 
     startSearch() {
-        if (this.isSearching) return;
+        if (this.searchInProgress && !this.searchPaused) return;
+        
+        if (this.searchPaused) {
+            this.searchPaused = false;
+            this.searchInProgress = true;
+            return; // step loop should resume if it was just paused
+        }
+
         this.clearSearchState();
-        this.isSearching = true;
+        this.searchInProgress = true;
 
         const start = this.startNodeIdx;
         const goal = this.goalNodeIdx;
@@ -314,9 +323,9 @@ const PolygonMazeCase = {
         this.frontier = [start];
 
         const step = () => {
-            if (!this.isSearching || pq.empty()) {
-                if (!this.found) {
-                    this.isSearching = false;
+            if (!this.searchInProgress || this.searchPaused || pq.empty()) {
+                if (!this.found && !this.searchPaused) {
+                    this.searchInProgress = false;
                     MazeEngine.playResultSound(false, this.config);
                 }
                 return;
@@ -328,9 +337,13 @@ const PolygonMazeCase = {
 
             if (current === goal) {
                 this.found = true;
-                this.isSearching = false;
+                this.searchInProgress = false;
                 this.reconstructPath(goal);
                 MazeEngine.playResultSound(true, this.config);
+                if (typeof Core !== 'undefined') {
+                    Core.syncPlayButton();
+                    Core.updateControls();
+                }
                 this.draw();
                 return;
             }
@@ -458,9 +471,12 @@ const PolygonMazeCase = {
         return shared;
     },
 
-    start() { this.reset(); },
-    stop() { this.isSearching = false; },
-    destroy() { this.stop(); }
+    start() { 
+        if (this.found) this.reset(); // If already solved, generate new
+        this.startSearch(); 
+    },
+    stop() { this.searchPaused = true; },
+    destroy() { this.searchInProgress = false; }
 };
 
 window.PolygonMazeCase = PolygonMazeCase;
