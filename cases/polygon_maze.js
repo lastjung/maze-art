@@ -84,7 +84,13 @@ const PolygonMazeCase = {
                 type: 'select',
                 id: 'pm_theme',
                 label: 'Color Theme',
-                options: Object.keys(MazeEngine.themes).map(t => ({ label: t.charAt(0).toUpperCase() + t.slice(1), value: t })),
+                options: [
+                    { value: 'rainbow', label: '0. Default (Rainbow)' },
+                    { value: 'basic', label: '1. Basic (Green/Pink)' },
+                    { value: 'ocean', label: '2. Ocean (Cyan/Blue)' },
+                    { value: 'sunset', label: '3. Sunset (Orange/Purple)' },
+                    { value: 'neon', label: '4. Neon (Gray/Lime)' }
+                ],
                 value: this.config.theme,
                 onChange: (v) => { this.config.theme = v; this.draw(); }
             },
