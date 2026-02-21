@@ -37,7 +37,8 @@ const PolygonMazeCase = {
         theme: 'ocean',
         speed: 40,
         sfxEnabled: true,
-        sfxVolume: 0.2
+        sfxVolume: 0.1,
+        searchMode: 'astar'
     },
 
     init() {
@@ -59,21 +60,33 @@ const PolygonMazeCase = {
         return [
             {
                 type: 'select',
+                id: 'pm_shape',
+                label: 'Maze Shape',
+                value: 'random',
+                options: [{ value: 'random', label: 'Random (Default)' }],
+                onChange: () => { this.reset(); }
+            },
+            {
+                type: 'select',
+                id: 'pm_algorithm',
+                label: 'Pathfinding',
+                value: this.config.searchMode,
+                options: [
+                    { value: 'astar', label: 'A*' },
+                    { value: 'dijkstra', label: 'Dijkstra' },
+                    { value: 'greedy', label: 'Greedy Best-First' },
+                    { value: 'bfs', label: 'Breadth-First Search' },
+                    { value: 'dfs', label: 'Depth-First Search' }
+                ],
+                onChange: (v) => { this.config.searchMode = v; this.startSearch(); }
+            },
+            {
+                type: 'select',
                 id: 'pm_theme',
-                label: 'Theme',
+                label: 'Color Theme',
                 options: Object.keys(MazeEngine.themes).map(t => ({ label: t.charAt(0).toUpperCase() + t.slice(1), value: t })),
                 value: this.config.theme,
                 onChange: (v) => { this.config.theme = v; this.draw(); }
-            },
-            {
-                type: 'slider',
-                id: 'pm_complexity',
-                label: 'Complexity',
-                min: 100,
-                max: 2000,
-                step: 100,
-                value: this.config.numPoints,
-                onChange: (v) => { this.config.numPoints = v; this.reset(); }
             },
             {
                 type: 'slider',
@@ -86,26 +99,29 @@ const PolygonMazeCase = {
                 onChange: (v) => { this.config.speed = v; }
             },
             {
-                type: 'toggle',
-                id: 'pm_sfx',
-                label: 'Sound Effects',
-                value: this.config.sfxEnabled,
-                onChange: (v) => { this.config.sfxEnabled = v; }
+                type: 'slider',
+                id: 'pm_sfx_volume',
+                label: 'SFX Volume',
+                min: 0,
+                max: 0.3,
+                step: 0.01,
+                value: this.config.sfxVolume,
+                onChange: (v) => { this.config.sfxVolume = v; }
             },
             {
-                type: 'button',
-                id: 'pm_new_maze',
-                label: 'New Maze',
-                value: 'Generate',
-                onClick: () => this.reset()
+                type: 'slider',
+                id: 'pm_radius',
+                label: 'Grid Radius',
+                min: 100,
+                max: 2000,
+                step: 100,
+                value: this.config.numPoints,
+                onChange: (v) => { this.config.numPoints = v; this.reset(); }
             },
-            {
-                type: 'button',
-                id: 'pm_solve',
-                label: 'Solve Maze',
-                value: 'Start A*',
-                onClick: () => this.startSearch()
-            }
+            { type: 'info', label: 'Start (Green)', value: 'Drag to Move' },
+            { type: 'info', label: 'Goal (Red)', value: 'Drag to Move' },
+            { type: 'info', label: 'Walls (Gray)', value: 'Drag to Edit' },
+            { type: 'info', label: 'Maze Control', value: 'Use top Reset Maze + Go' }
         ];
     },
 
