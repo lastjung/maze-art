@@ -385,6 +385,35 @@ const PolygonMazeCase = {
         const maxR = Math.min(this.width, this.height) * 0.45;
         const turns = 3.4;
         const samples = Math.max(220, Math.min(900, Math.floor(activeList.length * 1.1)));
+        const twoPi = Math.PI * 2;
+
+        const spiralR = new Map();
+        const spiralS = new Map();
+        for (const idx of activeList) {
+            const p = this.points[idx];
+            const dx = p.x - cx;
+            const dy = p.y - cy;
+            const r = Math.hypot(dx, dy);
+            let angle = Math.atan2(dy, dx);
+            if (angle < 0) angle += twoPi;
+            const s = angle + turns * twoPi * (r / Math.max(1, maxR));
+            spiralR.set(idx, r);
+            spiralS.set(idx, s);
+        }
+
+        const allowEdge = (a, b) => {
+            const sa = spiralS.get(a);
+            const sb = spiralS.get(b);
+            const ra = spiralR.get(a);
+            const rb = spiralR.get(b);
+            if (sa === undefined || sb === undefined || ra === undefined || rb === undefined) return false;
+            const ds = Math.abs(sa - sb);
+            const dr = Math.abs(ra - rb);
+            // Prevent cross-turn shortcuts that collapse the maze into a near-single line.
+            if (ds > 1.05) return false;
+            if (dr > maxR * 0.12) return false;
+            return true;
+        };
 
         // Build explicit spiral waypoints in screen space, then snap each point
         // to the nearest active polygon center.
@@ -420,7 +449,7 @@ const PolygonMazeCase = {
             return;
         }
 
-        const carvePath = (startIdx, goalIdx) => {
+        const carvePath = (startIdx, goalIdx, strict = true) => {
             if (startIdx === goalIdx) return [startIdx];
             const pq = new PriorityQueue();
             const came = new Map();
@@ -436,6 +465,7 @@ const PolygonMazeCase = {
                 const neighbors = this.neighbors[current] || [];
                 for (const next of neighbors) {
                     if (!this.activeNodes.has(next)) continue;
+                    if (strict && !allowEdge(current, next)) continue;
                     const stepCost = 1;
                     const newCost = cc + stepCost;
                     const old = cost.get(next);
@@ -463,7 +493,11 @@ const PolygonMazeCase = {
 
         const backboneNodes = new Set();
         for (let i = 0; i < anchors.length - 1; i++) {
-            const path = carvePath(anchors[i], anchors[i + 1]);
+            let path = carvePath(anchors[i], anchors[i + 1], true);
+            if (path.length < 2) {
+                // Fallback if strict constraints disconnected this local segment.
+                path = carvePath(anchors[i], anchors[i + 1], false);
+            }
             for (let j = 0; j < path.length - 1; j++) {
                 const a = path[j];
                 const b = path[j + 1];
@@ -485,7 +519,7 @@ const PolygonMazeCase = {
             const fi = Math.floor(Math.random() * frontier.length);
             const current = frontier[fi];
             const candidates = (this.neighbors[current] || []).filter(n =>
-                this.activeNodes.has(n) && !visited.has(n)
+                this.activeNodes.has(n) && !visited.has(n) && allowEdge(current, n)
             );
 
             if (candidates.length === 0) {
@@ -505,6 +539,7 @@ const PolygonMazeCase = {
         for (const i of activeList) {
             for (const n of this.neighbors[i] || []) {
                 if (i >= n || !this.activeNodes.has(n)) continue;
+                if (!allowEdge(i, n)) continue;
                 const edgeKey = i < n ? `${i}-${n}` : `${n}-${i}`;
                 if (this.openEdges.has(edgeKey)) continue;
                 if (!visited.has(i) && !visited.has(n)) continue;
