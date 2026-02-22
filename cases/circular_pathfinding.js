@@ -32,6 +32,9 @@ const CircularPathfindingCase = {
     sfxVolume: 0.08,
     stepSoundTick: 0,
     lastStepSoundAt: 0,
+    solutionSpeed: 70,
+    pathProgress: 0,
+    pathAnimTimer: null,
 
     // Interaction State
     dragTarget: null,
@@ -45,7 +48,8 @@ const CircularPathfindingCase = {
         showGraph: true,
         showHugging: true,
         actorRadius: 10, // Minkowski expansion
-        searchSpeedMs: 24
+        searchSpeedMs: 24,
+        solutionSpeed: 70
     },
 
     init() {
@@ -314,6 +318,8 @@ const CircularPathfindingCase = {
         this.searchGoalRef = null;
         this.stepSoundTick = 0;
         this.lastStepSoundAt = 0;
+        this.pathProgress = 0;
+        if (this.pathAnimTimer) clearTimeout(this.pathAnimTimer);
     },
 
     ensureAudioContext() {
@@ -467,6 +473,9 @@ const CircularPathfindingCase = {
         }
         this.playResultSound(this.path.length > 1);
         this.currentSearchNode = null;
+        if (this.path.length > 1) {
+            this.startPathAnimation();
+        }
         this.draw();
 
         if (typeof Core !== 'undefined' && Core.currentCase === this && Core.isRunning) {
@@ -528,6 +537,43 @@ const CircularPathfindingCase = {
         this.searchFrontierSet.add(start);
         this.draw();
         this.searchTimer = setTimeout(() => this.stepSearch(), this.config.searchSpeedMs);
+    },
+
+    startPathAnimation() {
+        this.pathProgress = 0;
+        if (this.pathAnimTimer) clearTimeout(this.pathAnimTimer);
+        this.animatePath();
+    },
+
+    animatePath() {
+        if (this.pathProgress < this.path.length) {
+            const step = Math.ceil(Math.pow(this.solutionSpeed / 25, 2));
+            this.pathProgress = Math.min(this.path.length, this.pathProgress + step);
+            
+            const delay = Math.max(1, 150 - this.solutionSpeed * 1.4);
+            this.pathAnimTimer = setTimeout(() => this.animatePath(), delay);
+            this.draw();
+        } else {
+            // High pitched "Ding" sound
+            if (this.config.sfxEnabled) {
+                const ctx = this.ensureAudioContext();
+                if (ctx) {
+                    const now = ctx.currentTime;
+                    const playTone = (freq, dur, vol, wait) => {
+                        const gain = ctx.createGain();
+                        const osc = ctx.createOscillator();
+                        osc.frequency.value = freq;
+                        gain.gain.setValueAtTime(0.0001, now + wait);
+                        gain.gain.linearRampToValueAtTime(this.sfxVolume * vol, now + wait + 0.002);
+                        gain.gain.exponentialRampToValueAtTime(0.0001, now + wait + dur);
+                        osc.connect(gain); gain.connect(ctx.destination);
+                        osc.start(now + wait); osc.stop(now + wait + dur + 0.01);
+                    };
+                    playTone(1046.50, 0.2, 0.8, 0);
+                    playTone(1318.51, 0.3, 0.4, 0.05);
+                }
+            }
+        }
     },
 
     triggerSearch() {
@@ -788,6 +834,7 @@ const CircularPathfindingCase = {
 
     stop() {
         this.stopSearchAnimation();
+        if (this.pathAnimTimer) clearTimeout(this.pathAnimTimer);
         if (this.animationId) {
             cancelAnimationFrame(this.animationId);
             this.animationId = null;
@@ -935,6 +982,19 @@ const CircularPathfindingCase = {
                 value: Math.max(1, Math.min(40, Math.round((205 - this.config.searchSpeedMs) / 5))),
                 onChange: (v) => {
                     this.config.searchSpeedMs = 205 - v * 5;
+                    this.saveSettings();
+                }
+            },
+            {
+                type: 'slider',
+                id: 'cp_sol_speed',
+                label: 'Solution Speed',
+                min: 1,
+                max: 100,
+                step: 1,
+                value: this.solutionSpeed,
+                onChange: (v) => {
+                    this.solutionSpeed = v;
                     this.saveSettings();
                 }
             },

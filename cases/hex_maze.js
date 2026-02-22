@@ -38,6 +38,10 @@ const HexMazeCase = {
     searchInProgress: false,
     searchPaused: false,
     colorTheme: 'basic',
+    solutionSpeed: 70,
+    pathProgress: 0,
+    pathMap: new Map(),
+    pathAnimTimer: null,
 
     themes: {
         basic: {
@@ -177,6 +181,18 @@ const HexMazeCase = {
             },
             {
                 type: 'slider',
+                id: 'pf_sol_speed',
+                label: 'Solution Speed',
+                min: 1,
+                max: 100,
+                step: 1,
+                value: this.solutionSpeed,
+                onChange: (v) => {
+                    this.solutionSpeed = v;
+                }
+            },
+            {
+                type: 'slider',
                 id: 'pf_sfx_volume',
                 label: 'SFX Volume',
                 min: 0,
@@ -264,6 +280,9 @@ const HexMazeCase = {
         this.cameFrom = {};
         this.costSoFar = {};
         this.path = [];
+        this.pathProgress = 0;
+        this.pathMap.clear();
+        if (this.pathAnimTimer) clearTimeout(this.pathAnimTimer);
         this.pathSet.clear();
         this.frontierSet.clear();
         this.exploredSet.clear();
@@ -372,6 +391,12 @@ const HexMazeCase = {
             current = this.cameFrom[MazeEngine.key(current)];
         }
         this.path.reverse();
+        
+        // Build map for O(1) index lookup during drawing
+        this.pathMap.clear();
+        this.path.forEach((node, idx) => {
+            this.pathMap.set(MazeEngine.key(node), idx);
+        });
     },
 
     finishSearch(found) {
@@ -381,7 +406,10 @@ const HexMazeCase = {
             this.lastSearchMs = this.searchElapsedMs;
             this.searchStartedAtMs = 0;
         }
-        if (found) this.reconstructPath();
+        if (found) {
+            this.reconstructPath();
+            this.startPathAnimation();
+        }
         if (found) this.totalFindCount += 1;
         this.lastEnteredHexCount = this.exploredSet.size;
         MazeEngine.playResultSound(found, this);
@@ -453,6 +481,25 @@ const HexMazeCase = {
         }
 
         this.finishSearch(false);
+    },
+
+    startPathAnimation() {
+        this.pathProgress = 0;
+        if (this.pathAnimTimer) clearTimeout(this.pathAnimTimer);
+        this.animatePath();
+    },
+
+    animatePath() {
+        if (this.pathProgress < this.path.length) {
+            const step = Math.ceil(Math.pow(this.solutionSpeed / 25, 2));
+            this.pathProgress = Math.min(this.path.length, this.pathProgress + step);
+
+            const delay = Math.max(1, 150 - this.solutionSpeed * 1.4);
+            this.pathAnimTimer = setTimeout(() => this.animatePath(), delay);
+            this.draw();
+        } else {
+            MazeEngine.playSolutionFinishSound(this);
+        }
     },
 
     startSearchAnimation() {
@@ -835,7 +882,7 @@ const HexMazeCase = {
         } else if (k === MazeEngine.key(this.goalNode)) {
             fill = theme.goal;
             stroke = theme.colorTheme === 'basic' ? '#CC0000' : 'rgba(255,255,255,0.4)';
-        } else if (this.pathSet.has(k)) {
+        } else if (this.pathMap.has(k) && this.pathMap.get(k) < this.pathProgress) {
             fill = theme.path;
         } else if (k === (this.currentNode ? MazeEngine.key(this.currentNode) : '')) {
             fill = theme.current;
@@ -892,7 +939,7 @@ const HexMazeCase = {
 
         MazeEngine.forEachHex(this.gridRadius, (h) => this.drawHex(h.q, h.r));
 
-        if (this.path.length > 1) {
+        if (this.path.length > 1 && this.pathProgress > 0) {
             const theme = MazeEngine.themes[this.colorTheme] || MazeEngine.themes.basic;
             ctx.beginPath();
             ctx.strokeStyle = theme.current; 
@@ -900,11 +947,12 @@ const HexMazeCase = {
             ctx.lineJoin = 'round';
             ctx.lineCap = 'round';
 
-            this.path.forEach((node, i) => {
+            for (let i = 0; i < this.pathProgress; i++) {
+                const node = this.path[i];
                 const p = MazeEngine.hexToPixel(node.q, node.r, this.hexSize);
                 if (i === 0) ctx.moveTo(p.x, p.y);
                 else ctx.lineTo(p.x, p.y);
-            });
+            }
             ctx.stroke();
         }
 
@@ -1002,6 +1050,7 @@ const HexMazeCase = {
 
     destroy() {
         this.stopSearchAnimation();
+        if (this.pathAnimTimer) clearTimeout(this.pathAnimTimer);
         this.unbindEvents();
         MazeEngine.destroyAudio();
     }

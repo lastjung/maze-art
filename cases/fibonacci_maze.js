@@ -62,6 +62,9 @@ const FibonacciMazeCase = {
     lastEnteredHexCount: 0,
     stepSoundTick: 0,
     lastStepSoundAt: 0,
+    solutionSpeed: 70,
+    pathProgress: 0,
+    pathAnimTimer: null,
 
     // Interaction
     isDraggingStart: false,
@@ -145,6 +148,18 @@ const FibonacciMazeCase = {
                 value: MazeEngine.delayToSpeed(this.searchDelayMs),
                 onChange: (v) => {
                     this.searchDelayMs = MazeEngine.speedToDelay(v);
+                }
+            },
+            {
+                type: 'slider',
+                id: 'fib_sol_speed',
+                label: 'Solution Speed',
+                min: 1,
+                max: 100,
+                step: 1,
+                value: this.solutionSpeed,
+                onChange: (v) => {
+                    this.solutionSpeed = v;
                 }
             },
             {
@@ -279,6 +294,8 @@ const FibonacciMazeCase = {
         this.lastStepSoundAt = 0;
         this.searchElapsedMs = 0;
         this.searchStartedAtMs = 0;
+        this.pathProgress = 0;
+        if (this.pathAnimTimer) clearTimeout(this.pathAnimTimer);
     },
 
     stopSearchAnimation() {
@@ -431,6 +448,7 @@ const FibonacciMazeCase = {
                 this.searchStartedAtMs = 0;
             }
             this.totalFindCount += 1;
+            this.startPathAnimation();
             MazeEngine.playResultSound(true, this);
         } else {
             // Failed to find path to current waypoint
@@ -510,6 +528,27 @@ const FibonacciMazeCase = {
         }
 
         this.finishSearch(false);
+    },
+
+    startPathAnimation() {
+        this.pathProgress = 0;
+        if (this.pathAnimTimer) clearTimeout(this.pathAnimTimer);
+        this.animatePath();
+    },
+
+    animatePath() {
+        // Count total nodes in globalPath
+        const totalNodes = this.globalPath.reduce((acc, seg) => acc + seg.length, 0);
+        if (this.pathProgress < totalNodes) {
+            const step = Math.ceil(Math.pow(this.solutionSpeed / 25, 2));
+            this.pathProgress = Math.min(totalNodes, this.pathProgress + step);
+            
+            const delay = Math.max(1, 150 - this.solutionSpeed * 1.4);
+            this.pathAnimTimer = setTimeout(() => this.animatePath(), delay);
+            this.draw();
+        } else {
+            MazeEngine.playSolutionFinishSound(this);
+        }
     },
 
     startSearchAnimation() {
@@ -971,7 +1010,7 @@ const FibonacciMazeCase = {
 
         MazeEngine.forEachHex(this.gridRadius, (h) => this.drawHex(h.q, h.r));
 
-        if (this.globalPath.length > 1 || this.path.length > 1) {
+        if ((this.globalPath.length > 0 || this.path.length > 1) && this.pathProgress > 0) {
             const theme = MazeEngine.themes[this.colorTheme] || MazeEngine.themes.ocean;
             ctx.beginPath();
             ctx.strokeStyle = theme.current; 
@@ -979,21 +1018,31 @@ const FibonacciMazeCase = {
             ctx.lineJoin = 'round';
             ctx.lineCap = 'round';
 
-            // Draw completed global path segments
-            this.globalPath.forEach(segment => {
-                segment.forEach((node, i) => {
+            let nodesDrawn = 0;
+            // Draw segments from globalPath
+            for (let s = 0; s < this.globalPath.length; s++) {
+                const segment = this.globalPath[s];
+                for (let i = 0; i < segment.length; i++) {
+                    if (nodesDrawn >= this.pathProgress) break;
+                    const node = segment[i];
                     const p = MazeEngine.hexToPixel(node.q, node.r, this.hexSize);
                     if (i === 0) ctx.moveTo(p.x, p.y);
                     else ctx.lineTo(p.x, p.y);
-                });
-            });
+                    nodesDrawn++;
+                }
+                if (nodesDrawn >= this.pathProgress) break;
+            }
             
-            // Continue drawing the active segment path directly from its own start
-            if (this.path.length > 0) {
+            // Draw current path if not reached pathProgress limit
+            if (nodesDrawn < this.pathProgress && this.path.length > 0) {
+                // If we finished globalPath segments, the next point in this.path might need a moveTo 
+                // but let's assume globalPath contains the backbone.
                 this.path.forEach((node, i) => {
+                    if (nodesDrawn >= this.pathProgress) return;
                     const p = MazeEngine.hexToPixel(node.q, node.r, this.hexSize);
                     if (i === 0) ctx.moveTo(p.x, p.y);
                     else ctx.lineTo(p.x, p.y);
+                    nodesDrawn++;
                 });
             }
 

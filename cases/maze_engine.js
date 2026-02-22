@@ -326,6 +326,12 @@ const MazeEngine = {
         this.playTone(180, 0.16, 'sawtooth', 0.7, 0.003, contextData);
     },
 
+    playSolutionFinishSound(contextData) {
+        // High pitched "Ding" sound
+        this.playTone(1046.50, 0.2, 'sine', 0.8, 0.002, contextData);
+        setTimeout(() => this.playTone(1318.51, 0.3, 'sine', 0.4, 0.002, contextData), 50);
+    },
+
     destroyAudio() {
         if (this.audioCtx) {
             this.audioCtx.close().catch(() => {});

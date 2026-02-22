@@ -38,6 +38,10 @@ const PolygonMazeCase = {
     searchElapsedMs: 0,
     searchTimeout: null,
     lastEnteredNodeCount: 0,
+    solutionSpeed: 70,
+    pathProgress: 0,
+    pathMap: new Map(),
+    pathAnimTimer: null,
 
     // Config (Mirrored from HexMazeCase)
     config: {
@@ -113,6 +117,16 @@ const PolygonMazeCase = {
                 step: 1,
                 value: this.config.speed,
                 onChange: (v) => { this.config.speed = v; }
+            },
+            {
+                type: 'slider',
+                id: 'pm_sol_speed',
+                label: 'Solution Speed',
+                min: 1,
+                max: 100,
+                step: 1,
+                value: this.solutionSpeed,
+                onChange: (v) => { this.solutionSpeed = v; }
             },
             {
                 type: 'slider',
@@ -302,6 +316,9 @@ const PolygonMazeCase = {
         this.explored.clear();
         this.parentMap.clear();
         this.path = [];
+        this.pathProgress = 0;
+        this.pathMap.clear();
+        if (this.pathAnimTimer) clearTimeout(this.pathAnimTimer);
         this.found = false;
         this.searchInProgress = false;
         this.searchPaused = false;
@@ -384,6 +401,7 @@ const PolygonMazeCase = {
                 Core.syncPlayButton();
                 Core.updateControls();
             }
+            this.startPathAnimation();
             this.draw();
             return;
         }
@@ -447,12 +465,39 @@ const PolygonMazeCase = {
     },
 
     reconstructPath(goal) {
+        this.path = [];
         let curr = goal;
         while (curr !== null) {
             this.path.push(curr);
             curr = this.parentMap.get(curr);
         }
         this.path.reverse();
+
+        // Build map for O(1) index lookup
+        this.pathMap.clear();
+        this.path.forEach((idx, i) => {
+            this.pathMap.set(idx, i);
+        });
+    },
+
+    startPathAnimation() {
+        this.pathProgress = 0;
+        if (this.pathAnimTimer) clearTimeout(this.pathAnimTimer);
+        this.animatePath();
+    },
+
+    animatePath() {
+        if (!this.found || this.searchPaused) return;
+        if (this.pathProgress < this.path.length) {
+            const step = Math.ceil(Math.pow(this.solutionSpeed / 25, 2));
+            this.pathProgress = Math.min(this.path.length, this.pathProgress + step);
+            
+            const delay = Math.max(1, 150 - this.solutionSpeed * 1.4);
+            this.pathAnimTimer = setTimeout(() => this.animatePath(), delay);
+            this.draw();
+        } else {
+            MazeEngine.playSolutionFinishSound(this.config);
+        }
     },
 
     draw() {
@@ -475,7 +520,9 @@ const PolygonMazeCase = {
 
             // Fill based on search state
             let fill = 'rgba(240, 248, 255, 0.05)';
-            if (this.path.includes(i)) {
+            const pathIdx = this.pathMap.get(i);
+            
+            if (pathIdx !== undefined && pathIdx < this.pathProgress) {
                 fill = theme.path;
             } else if (i === this.currentIdx) {
                 fill = theme.current;
@@ -483,9 +530,22 @@ const PolygonMazeCase = {
                 fill = theme.explored;
             } else if (this.frontier.includes(i)) {
                 fill = theme.frontier;
+            } else if (i === this.startNodeIdx) {
+                fill = theme.start;
+            } else if (i === this.goalNodeIdx) {
+                fill = theme.goal;
             }
+
             this.ctx.fillStyle = fill;
             this.ctx.fill();
+
+            // Start/Goal indicators (circles)
+            if (i === this.startNodeIdx || i === this.goalNodeIdx) {
+                this.ctx.beginPath();
+                this.ctx.arc(c.x, c.y, 5, 0, Math.PI * 2);
+                this.ctx.fillStyle = i === this.startNodeIdx ? theme.start : theme.goal;
+                this.ctx.fill();
+            }
 
             // Draw Walls (Edges that are NOT in openEdges)
             this.neighbors[i].forEach(nIdx => {
@@ -514,13 +574,13 @@ const PolygonMazeCase = {
         });
 
         // 2. Draw Path Line
-        if (this.path.length > 0) {
+        if (this.path.length > 0 && this.pathProgress > 0) {
             this.ctx.beginPath();
             this.ctx.strokeStyle = theme.current;
             this.ctx.lineWidth = 3;
             this.ctx.lineJoin = 'round';
             this.ctx.moveTo(this.points[this.path[0]].x, this.points[this.path[0]].y);
-            for (let i = 1; i < this.path.length; i++) {
+            for (let i = 1; i < this.pathProgress; i++) {
                 this.ctx.lineTo(this.points[this.path[i]].x, this.points[this.path[i]].y);
             }
             this.ctx.stroke();
@@ -582,10 +642,12 @@ const PolygonMazeCase = {
     stop() { 
         if (this.searchInProgress) this.pauseSearch();
         else this.stopSearchAnimation();
+        if (this.pathAnimTimer) clearTimeout(this.pathAnimTimer);
     },
 
     destroy() { 
         this.stopSearchAnimation(); 
+        if (this.pathAnimTimer) clearTimeout(this.pathAnimTimer);
     }
 };
 
