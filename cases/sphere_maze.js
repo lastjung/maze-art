@@ -606,7 +606,14 @@ const SphereMazeCase = {
         // Grab-style drag: sphere follows pointer direction.
         this.rotY += dx * 0.005;
         this.rotX -= dy * 0.005;
+        this.clampPitch();
         this.draw();
+    },
+
+    clampPitch() {
+        const lim = Math.PI * 0.49;
+        if (this.rotX > lim) this.rotX = lim;
+        if (this.rotX < -lim) this.rotX = -lim;
     },
 
     onMouseUp() {
@@ -818,6 +825,7 @@ const SphereMazeCase = {
                 if (!this.isDragging) {
                     this.rotY += this.rotationSpeed * dt;
                     this.rotX += this.rotationSpeed * dt * 0.4;
+                    this.clampPitch();
                 }
                 
                 this.draw();
