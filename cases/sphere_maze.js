@@ -603,9 +603,9 @@ const SphereMazeCase = {
         this.lastMouseX = e.clientX;
         this.lastMouseY = e.clientY;
 
-        // Sensible rotation speed mapping
+        // Grab-style drag: sphere follows pointer direction.
         this.rotY += dx * 0.005;
-        this.rotX += dy * 0.005;
+        this.rotX -= dy * 0.005;
         this.draw();
     },
 
