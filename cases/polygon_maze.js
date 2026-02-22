@@ -57,6 +57,7 @@ const PolygonMazeCase = {
         sfxVolume: 0.1,
         searchMode: 'astar'
     },
+    mazeShape: 'random',
 
     init() {
         this.canvas = document.getElementById('mathCanvas');
@@ -80,9 +81,15 @@ const PolygonMazeCase = {
                 type: 'select',
                 id: 'pm_shape',
                 label: 'Maze Shape',
-                value: 'random',
-                options: [{ value: 'random', label: 'Random (Default)' }],
-                onChange: () => { this.reset(); }
+                value: this.mazeShape || 'random',
+                options: [
+                    { value: 'random', label: 'Random (Default)' },
+                    { value: 'spiral', label: 'Spiral Path' }
+                ],
+                onChange: (v) => {
+                    this.mazeShape = v;
+                    this.reset();
+                }
             },
             {
                 type: 'select',
@@ -163,14 +170,18 @@ const PolygonMazeCase = {
     reset() {
         this.stopSearchAnimation();
         if (this.width === 0 || this.height === 0) this.resize();
+        this.startNodeIdx = null;
+        this.goalNodeIdx = null;
         
         this.generateTopology();
         this.generateMaze();
         
         // Pick start and goal
         // Start: nearest to left-top, Goal: nearest to right-bottom
-        this.startNodeIdx = this.findNearestIdx(this.width * 0.1, this.height * 0.1);
-        this.goalNodeIdx = this.findNearestIdx(this.width * 0.9, this.height * 0.9);
+        if (this.startNodeIdx === null || this.goalNodeIdx === null) {
+            this.startNodeIdx = this.findNearestIdx(this.width * 0.1, this.height * 0.1);
+            this.goalNodeIdx = this.findNearestIdx(this.width * 0.9, this.height * 0.9);
+        }
         
         this.clearSearchState();
         this.draw();
@@ -304,6 +315,11 @@ const PolygonMazeCase = {
     },
 
     generateMaze() {
+        if (this.mazeShape === 'spiral') {
+            this.generateSpiralMaze();
+            return;
+        }
+
         this.openEdges.clear();
         const activeList = Array.from(this.activeNodes);
         if (activeList.length === 0) return;
@@ -327,6 +343,97 @@ const PolygonMazeCase = {
                 stack.pop();
             }
         }
+    },
+
+    generateSpiralMaze() {
+        this.openEdges.clear();
+        const activeList = Array.from(this.activeNodes);
+        if (activeList.length < 2) return;
+
+        const cx = this.width * 0.5;
+        const cy = this.height * 0.5;
+        let maxR = 1;
+
+        const scored = activeList.map((idx) => {
+            const p = this.points[idx];
+            const dx = p.x - cx;
+            const dy = p.y - cy;
+            const r = Math.hypot(dx, dy);
+            if (r > maxR) maxR = r;
+            let angle = Math.atan2(dy, dx);
+            if (angle < 0) angle += Math.PI * 2;
+            return { idx, r, angle };
+        });
+
+        const turns = 3.2;
+        const twoPi = Math.PI * 2;
+        scored.forEach((n) => {
+            const rn = n.r / maxR;
+            n.s = n.angle + turns * twoPi * rn;
+        });
+        scored.sort((a, b) => a.s - b.s);
+
+        const targetAnchors = Math.max(30, Math.min(180, scored.length));
+        const step = Math.max(1, Math.floor(scored.length / targetAnchors));
+        const anchors = [];
+        for (let i = 0; i < scored.length; i += step) anchors.push(scored[i].idx);
+        if (anchors[anchors.length - 1] !== scored[scored.length - 1].idx) {
+            anchors.push(scored[scored.length - 1].idx);
+        }
+
+        const carvePath = (startIdx, goalIdx) => {
+            if (startIdx === goalIdx) return [startIdx];
+            const pq = new PriorityQueue();
+            const came = new Map();
+            const cost = new Map();
+            pq.put(startIdx, 0);
+            came.set(startIdx, null);
+            cost.set(startIdx, 0);
+
+            while (!pq.empty()) {
+                const current = pq.get();
+                if (current === goalIdx) break;
+                const cc = cost.get(current);
+                const neighbors = this.neighbors[current] || [];
+                for (const next of neighbors) {
+                    if (!this.activeNodes.has(next)) continue;
+                    const stepCost = 1;
+                    const newCost = cc + stepCost;
+                    const old = cost.get(next);
+                    if (old !== undefined && newCost >= old) continue;
+                    cost.set(next, newCost);
+                    came.set(next, current);
+                    const h = Math.hypot(
+                        this.points[next].x - this.points[goalIdx].x,
+                        this.points[next].y - this.points[goalIdx].y
+                    );
+                    pq.put(next, newCost + h * 0.02);
+                }
+            }
+
+            if (!came.has(goalIdx)) return [startIdx];
+            const path = [];
+            let cur = goalIdx;
+            while (cur !== null) {
+                path.push(cur);
+                cur = came.get(cur) ?? null;
+            }
+            path.reverse();
+            return path;
+        };
+
+        for (let i = 0; i < anchors.length - 1; i++) {
+            const path = carvePath(anchors[i], anchors[i + 1]);
+            for (let j = 0; j < path.length - 1; j++) {
+                const a = path[j];
+                const b = path[j + 1];
+                const edgeKey = a < b ? `${a}-${b}` : `${b}-${a}`;
+                this.openEdges.add(edgeKey);
+            }
+        }
+
+        this.startNodeIdx = anchors[0];
+        this.goalNodeIdx = anchors[anchors.length - 1];
     },
 
     findNearestIdx(x, y) {
