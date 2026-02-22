@@ -49,8 +49,8 @@ const PolygonMazeCase = {
 
     // Config (Mirrored from HexMazeCase)
     config: {
-        numPoints: 800,
-        lloydIterations: 2,
+        numPoints: 1200,
+        lloydIterations: 3,
         theme: 'ocean',
         speed: 40,
         sfxEnabled: true,
@@ -152,10 +152,10 @@ const PolygonMazeCase = {
             {
                 type: 'slider',
                 id: 'pm_radius',
-                label: 'Grid Radius',
-                min: 100,
-                max: 2000,
-                step: 100,
+                label: 'Point Count',
+                min: 300,
+                max: 3200,
+                step: 50,
                 value: this.config.numPoints,
                 live: false,
                 onChange: (v) => { this.config.numPoints = v; this.reset(); }
@@ -189,8 +189,38 @@ const PolygonMazeCase = {
 
     generateTopology() {
         this.points = [];
-        for(let i=0; i<this.config.numPoints; i++) {
-            this.points.push({ x: Math.random() * this.width, y: Math.random() * this.height });
+        const totalPoints = Math.max(300, Math.floor(this.config.numPoints));
+        const w = this.width;
+        const h = this.height;
+
+        if (this.mazeShape === 'spiral') {
+            // Keep a chunk of points on/near the spiral so the grid has finer local detail.
+            const guideCount = Math.max(180, Math.floor(totalPoints * 0.35));
+            const randomCount = Math.max(0, totalPoints - guideCount);
+            for (let i = 0; i < randomCount; i++) {
+                this.points.push({ x: Math.random() * w, y: Math.random() * h });
+            }
+
+            const cx = w * 0.5;
+            const cy = h * 0.5;
+            const maxR = Math.min(w, h) * 0.45;
+            const turns = 3.4;
+            for (let i = 0; i < guideCount; i++) {
+                const t = i / Math.max(1, guideCount - 1);
+                const theta = turns * Math.PI * 2 * t - Math.PI / 2;
+                const r = 8 + maxR * t;
+                const jitter = 6 + (1 - t) * 5;
+                const x = cx + Math.cos(theta) * r + (Math.random() - 0.5) * jitter;
+                const y = cy + Math.sin(theta) * r + (Math.random() - 0.5) * jitter;
+                this.points.push({
+                    x: Math.max(0, Math.min(w, x)),
+                    y: Math.max(0, Math.min(h, y))
+                });
+            }
+        } else {
+            for(let i = 0; i < totalPoints; i++) {
+                this.points.push({ x: Math.random() * w, y: Math.random() * h });
+            }
         }
 
         // Simple Lloyd Relaxation
