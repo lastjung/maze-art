@@ -461,6 +461,7 @@ const PolygonMazeCase = {
             return path;
         };
 
+        const backboneNodes = new Set();
         for (let i = 0; i < anchors.length - 1; i++) {
             const path = carvePath(anchors[i], anchors[i + 1]);
             for (let j = 0; j < path.length - 1; j++) {
@@ -468,7 +469,59 @@ const PolygonMazeCase = {
                 const b = path[j + 1];
                 const edgeKey = a < b ? `${a}-${b}` : `${b}-${a}`;
                 this.openEdges.add(edgeKey);
+                backboneNodes.add(a);
+                backboneNodes.add(b);
             }
+        }
+
+        // Expand from the spiral backbone to create many alternate routes.
+        const visited = new Set(backboneNodes);
+        const frontier = Array.from(backboneNodes);
+        const branchTarget = Math.max(120, Math.floor(activeList.length * 0.82));
+        let guard = 0;
+
+        while (visited.size < branchTarget && frontier.length > 0 && guard < activeList.length * 30) {
+            guard++;
+            const fi = Math.floor(Math.random() * frontier.length);
+            const current = frontier[fi];
+            const candidates = (this.neighbors[current] || []).filter(n =>
+                this.activeNodes.has(n) && !visited.has(n)
+            );
+
+            if (candidates.length === 0) {
+                frontier.splice(fi, 1);
+                continue;
+            }
+
+            const next = candidates[Math.floor(Math.random() * candidates.length)];
+            const edgeKey = current < next ? `${current}-${next}` : `${next}-${current}`;
+            this.openEdges.add(edgeKey);
+            visited.add(next);
+            frontier.push(next);
+        }
+
+        // Add extra loops so the solver has to explore/compare alternatives.
+        const closedEdges = [];
+        for (const i of activeList) {
+            for (const n of this.neighbors[i] || []) {
+                if (i >= n || !this.activeNodes.has(n)) continue;
+                const edgeKey = i < n ? `${i}-${n}` : `${n}-${i}`;
+                if (this.openEdges.has(edgeKey)) continue;
+                if (!visited.has(i) && !visited.has(n)) continue;
+                closedEdges.push(edgeKey);
+            }
+        }
+
+        const loopBudget = Math.min(
+            closedEdges.length,
+            Math.max(50, Math.floor(activeList.length * 0.22))
+        );
+        for (let i = 0; i < loopBudget; i++) {
+            const pick = i + Math.floor(Math.random() * (closedEdges.length - i));
+            const tmp = closedEdges[i];
+            closedEdges[i] = closedEdges[pick];
+            closedEdges[pick] = tmp;
+            this.openEdges.add(closedEdges[i]);
         }
 
         this.startNodeIdx = anchors[0];
