@@ -13,6 +13,7 @@ const PolygonMazeCase = {
     points: [],
     centers: [],
     neighbors: [],
+    activeNodes: new Set(),
     
     // Maze Data
     walls: new Set(), // Set of "edge keys" (centerIdx1-centerIdx2) that are CLOSED
@@ -222,6 +223,24 @@ const PolygonMazeCase = {
             voronoiVertices: this.getVoronoiVertices(delaunay, i)
         }));
 
+        // Keep only bounded Voronoi cells; unbounded edge cells can create
+        // "outside ground" traversal artifacts.
+        this.activeNodes = new Set();
+        const margin = 2;
+        this.centers.forEach((c, i) => {
+            const verts = c.voronoiVertices || [];
+            if (verts.length < 3) return;
+            const bounded = verts.every(v =>
+                Number.isFinite(v.x) &&
+                Number.isFinite(v.y) &&
+                v.x >= margin &&
+                v.x <= this.width - margin &&
+                v.y >= margin &&
+                v.y <= this.height - margin
+            );
+            if (bounded) this.activeNodes.add(i);
+        });
+
         this.neighbors = Array.from({length: this.points.length}, () => []);
         this.mazeEdges = [];
         const seenEdges = new Set();
@@ -229,6 +248,7 @@ const PolygonMazeCase = {
         for(let e=0; e < delaunay.halfedges.length; e++) {
             const p = delaunay.triangles[e];
             const q = delaunay.triangles[e % 3 === 2 ? e - 2 : e + 1];
+            if (!this.activeNodes.has(p) || !this.activeNodes.has(q)) continue;
             if (!this.neighbors[p].includes(q)) this.neighbors[p].push(q);
             
             const edgeKey = p < q ? `${p}-${q}` : `${q}-${p}`;
@@ -285,8 +305,12 @@ const PolygonMazeCase = {
 
     generateMaze() {
         this.openEdges.clear();
+        const activeList = Array.from(this.activeNodes);
+        if (activeList.length === 0) return;
+
         const visited = new Set();
-        const stack = [Math.floor(Math.random() * this.points.length)];
+        const start = activeList[Math.floor(Math.random() * activeList.length)];
+        const stack = [start];
         visited.add(stack[0]);
 
         while(stack.length > 0) {
@@ -307,12 +331,13 @@ const PolygonMazeCase = {
 
     findNearestIdx(x, y) {
         let minDist = Infinity;
-        let nearest = 0;
+        let nearest = null;
         this.points.forEach((p, i) => {
+            if (!this.activeNodes.has(i)) return;
             const d = (p.x - x)**2 + (p.y - y)**2;
             if (d < minDist) { minDist = d; nearest = i; }
         });
-        return nearest;
+        return nearest ?? 0;
     },
 
     clearSearchState() {
@@ -573,6 +598,7 @@ const PolygonMazeCase = {
 
         // 1. Draw Polygons
         this.centers.forEach((c, i) => {
+            if (!this.activeNodes.has(i)) return;
             if (c.voronoiVertices.length < 3) return;
 
             ctx.beginPath();
