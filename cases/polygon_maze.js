@@ -547,21 +547,40 @@ const PolygonMazeCase = {
 
     draw() {
         if (!this.ctx) return;
+        const ctx = this.ctx;
         const theme = MazeEngine.themes[this.config.theme] || MazeEngine.themes.ocean;
-        this.ctx.clearRect(0, 0, this.width, this.height);
-        this.ctx.fillStyle = '#1e1e1e';
-        this.ctx.fillRect(0, 0, this.width, this.height);
+        ctx.clearRect(0, 0, this.width, this.height);
+
+        // Layered background gives depth instead of a flat dark fill.
+        const bg = ctx.createLinearGradient(0, 0, this.width, this.height);
+        bg.addColorStop(0, '#0b1220');
+        bg.addColorStop(1, '#1b2330');
+        ctx.fillStyle = bg;
+        ctx.fillRect(0, 0, this.width, this.height);
+
+        const vignette = ctx.createRadialGradient(
+            this.width * 0.5,
+            this.height * 0.45,
+            Math.min(this.width, this.height) * 0.1,
+            this.width * 0.5,
+            this.height * 0.5,
+            Math.max(this.width, this.height) * 0.75
+        );
+        vignette.addColorStop(0, 'rgba(255,255,255,0.04)');
+        vignette.addColorStop(1, 'rgba(0,0,0,0.42)');
+        ctx.fillStyle = vignette;
+        ctx.fillRect(0, 0, this.width, this.height);
 
         // 1. Draw Polygons
         this.centers.forEach((c, i) => {
             if (c.voronoiVertices.length < 3) return;
 
-            this.ctx.beginPath();
-            this.ctx.moveTo(c.voronoiVertices[0].x, c.voronoiVertices[0].y);
+            ctx.beginPath();
+            ctx.moveTo(c.voronoiVertices[0].x, c.voronoiVertices[0].y);
             for (let j = 1; j < c.voronoiVertices.length; j++) {
-                this.ctx.lineTo(c.voronoiVertices[j].x, c.voronoiVertices[j].y);
+                ctx.lineTo(c.voronoiVertices[j].x, c.voronoiVertices[j].y);
             }
-            this.ctx.closePath();
+            ctx.closePath();
 
             // Fill based on search state
             let fill = 'rgba(240, 248, 255, 0.05)';
@@ -581,8 +600,11 @@ const PolygonMazeCase = {
                 fill = theme.goal;
             }
 
-            this.ctx.fillStyle = fill;
-            this.ctx.fill();
+            ctx.fillStyle = fill;
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+            ctx.lineWidth = 0.5;
+            ctx.stroke();
 
             // Draw Walls (Edges that are NOT in openEdges)
             this.neighbors[i].forEach(nIdx => {
@@ -591,36 +613,65 @@ const PolygonMazeCase = {
                     // Find common voronoi vertices
                     const shared = this.getSharedVertices(i, nIdx);
                     if (shared.length >= 2) {
-                        this.ctx.beginPath();
-                        this.ctx.strokeStyle = theme.wall;
-                        this.ctx.lineWidth = 2;
-                        this.ctx.moveTo(shared[0].x, shared[0].y);
-                        this.ctx.lineTo(shared[1].x, shared[1].y);
-                        this.ctx.stroke();
+                        ctx.beginPath();
+                        ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+                        ctx.lineWidth = 4;
+                        ctx.moveTo(shared[0].x, shared[0].y);
+                        ctx.lineTo(shared[1].x, shared[1].y);
+                        ctx.stroke();
+
+                        ctx.beginPath();
+                        ctx.strokeStyle = theme.wall;
+                        ctx.lineWidth = 1.4;
+                        ctx.moveTo(shared[0].x, shared[0].y);
+                        ctx.lineTo(shared[1].x, shared[1].y);
+                        ctx.stroke();
                     }
                 }
             });
 
             // Start/Goal indicators
             if (i === this.startNodeIdx || i === this.goalNodeIdx) {
-                this.ctx.beginPath();
-                this.ctx.arc(c.x, c.y, 5, 0, Math.PI * 2);
-                this.ctx.fillStyle = i === this.startNodeIdx ? theme.start : theme.goal;
-                this.ctx.fill();
+                ctx.beginPath();
+                ctx.arc(c.x, c.y, 5, 0, Math.PI * 2);
+                ctx.fillStyle = i === this.startNodeIdx ? theme.start : theme.goal;
+                ctx.fill();
             }
         });
 
         // 2. Draw Path Line
         if (this.path.length > 0 && this.pathProgress > 0) {
-            this.ctx.beginPath();
-            this.ctx.strokeStyle = theme.current;
-            this.ctx.lineWidth = 3;
-            this.ctx.lineJoin = 'round';
-            this.ctx.moveTo(this.points[this.path[0]].x, this.points[this.path[0]].y);
+            ctx.beginPath();
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+            ctx.lineWidth = 7;
+            ctx.lineJoin = 'round';
+            ctx.lineCap = 'round';
+            ctx.moveTo(this.points[this.path[0]].x, this.points[this.path[0]].y);
             for (let i = 1; i < this.pathProgress; i++) {
-                this.ctx.lineTo(this.points[this.path[i]].x, this.points[this.path[i]].y);
+                ctx.lineTo(this.points[this.path[i]].x, this.points[this.path[i]].y);
             }
-            this.ctx.stroke();
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.strokeStyle = theme.current;
+            ctx.lineWidth = 2.6;
+            ctx.lineJoin = 'round';
+            ctx.lineCap = 'round';
+            ctx.moveTo(this.points[this.path[0]].x, this.points[this.path[0]].y);
+            for (let i = 1; i < this.pathProgress; i++) {
+                ctx.lineTo(this.points[this.path[i]].x, this.points[this.path[i]].y);
+            }
+            ctx.stroke();
+        }
+
+        if (this.currentIdx !== null && this.points[this.currentIdx]) {
+            const p = this.points[this.currentIdx];
+            const pulse = 6 + Math.sin(performance.now() * 0.008) * 2.5;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, pulse, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+            ctx.lineWidth = 1.4;
+            ctx.stroke();
         }
 
         this.drawScoreboard();
