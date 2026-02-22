@@ -224,6 +224,7 @@ const HexMazeCase = {
                 max: 50,
                 step: 1,
                 value: this.gridRadius,
+                live: false,
                 onChange: (v) => {
                     this.gridRadius = v;
                     this.generateMaze({ solve: this.isCoreRunning() });

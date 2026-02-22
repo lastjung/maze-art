@@ -28,6 +28,9 @@ const SphereMazeCase = {
     
     // Internal Search Instance
     pq: null,
+    frontierQueue: null,
+    frontierStack: null,
+    frontierHead: 0,
     costSoFar: null,
     searchStartedAtMs: 0,
     searchElapsedMs: 0,
@@ -161,6 +164,7 @@ const SphereMazeCase = {
                 max: 1000,
                 step: 50,
                 value: this.config.numPoints,
+                live: false,
                 onChange: (v) => { this.config.numPoints = v; this.reset(); }
             },
             { type: 'info', label: 'Start (Green)', value: 'Automatically Set' },
@@ -256,6 +260,9 @@ const SphereMazeCase = {
         this.searchPaused = false;
         this.currentIdx = null;
         this.pq = null;
+        this.frontierQueue = null;
+        this.frontierStack = null;
+        this.frontierHead = 0;
         this.costSoFar = null;
         this.searchStartedAtMs = 0;
         this.searchElapsedMs = 0;
@@ -290,22 +297,51 @@ const SphereMazeCase = {
         this.searchStartedAtMs = performance.now();
 
         const start = this.startNodeIdx;
-        const goal = this.goalNodeIdx;
-
-        this.pq = new PriorityQueue();
-        this.pq.put(start, 0);
-
         this.costSoFar = new Map();
         this.costSoFar.set(start, 0);
         this.parentMap.set(start, null);
         this.frontier = [start];
+        this.frontierHead = 0;
+
+        if (this.config.searchMode === 'bfs') {
+            this.frontierQueue = [start];
+            this.frontierStack = null;
+            this.pq = null;
+        } else if (this.config.searchMode === 'dfs') {
+            this.frontierStack = [start];
+            this.frontierQueue = null;
+            this.pq = null;
+        } else {
+            this.pq = new PriorityQueue();
+            this.pq.put(start, 0);
+            this.frontierQueue = null;
+            this.frontierStack = null;
+        }
 
         if (typeof Core !== 'undefined') Core.syncPlayButton();
         this.searchStep();
     },
 
+    hasFrontier() {
+        if (this.config.searchMode === 'bfs') return this.frontierHead < this.frontierQueue.length;
+        if (this.config.searchMode === 'dfs') return this.frontierStack.length > 0;
+        return this.pq && !this.pq.empty();
+    },
+
+    popFrontier() {
+        if (this.config.searchMode === 'bfs') return this.frontierQueue[this.frontierHead++];
+        if (this.config.searchMode === 'dfs') return this.frontierStack.pop();
+        return this.pq.get();
+    },
+
+    pushFrontier(next, priority = 0) {
+        if (this.config.searchMode === 'bfs') this.frontierQueue.push(next);
+        else if (this.config.searchMode === 'dfs') this.frontierStack.push(next);
+        else this.pq.put(next, priority);
+    },
+
     searchStep() {
-        if (!this.searchInProgress || this.searchPaused || !this.pq || this.pq.empty()) {
+        if (!this.searchInProgress || this.searchPaused || !this.hasFrontier()) {
             if (!this.found && !this.searchPaused && this.searchInProgress) {
                 this.searchInProgress = false;
                 this.searchElapsedMs += performance.now() - this.searchStartedAtMs;
@@ -316,10 +352,12 @@ const SphereMazeCase = {
             return;
         }
 
-        const current = this.pq.get();
+        const current = this.popFrontier();
         const goal = this.goalNodeIdx;
         this.currentIdx = current;
         this.explored.add(current);
+        const frontierIdx = this.frontier.indexOf(current);
+        if (frontierIdx !== -1) this.frontier.splice(frontierIdx, 1);
 
         if (current === goal) {
             this.found = true;
@@ -349,6 +387,15 @@ const SphereMazeCase = {
 
         for (const next of neighbors) {
             const newCost = this.costSoFar.get(current) + 1;
+            if (this.config.searchMode === 'bfs' || this.config.searchMode === 'dfs') {
+                if (this.parentMap.has(next)) continue;
+                this.costSoFar.set(next, newCost);
+                this.parentMap.set(next, current);
+                this.pushFrontier(next);
+                if (!this.frontier.includes(next)) this.frontier.push(next);
+                continue;
+            }
+
             if (!this.costSoFar.has(next) || newCost < this.costSoFar.get(next)) {
                 this.costSoFar.set(next, newCost);
                 
@@ -357,15 +404,9 @@ const SphereMazeCase = {
                     priority += Math.sqrt((this.points[next].x - this.points[goal].x)**2 + (this.points[next].y - this.points[goal].y)**2 + (this.points[next].z - this.points[goal].z)**2);
                 } else if (this.config.searchMode === 'greedy') {
                     priority = Math.sqrt((this.points[next].x - this.points[goal].x)**2 + (this.points[next].y - this.points[goal].y)**2 + (this.points[next].z - this.points[goal].z)**2);
-                } else if (this.config.searchMode === 'dfs') {
-                    // Deepest nodes first
-                    priority = -newCost;
-                } else if (this.config.searchMode === 'bfs') {
-                    // Shallowest nodes first
-                    priority = newCost;
                 }
                 
-                this.pq.put(next, priority);
+                this.pushFrontier(next, priority);
                 this.parentMap.set(next, current);
                 if (!this.frontier.includes(next)) this.frontier.push(next);
             }

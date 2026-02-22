@@ -555,7 +555,7 @@ const CircularPathfindingCase = {
             this.draw();
         } else {
             // High pitched "Ding" sound
-            if (this.config.sfxEnabled) {
+            if (this.sfxEnabled) {
                 const ctx = this.ensureAudioContext();
                 if (ctx) {
                     const now = ctx.currentTime;

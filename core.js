@@ -181,7 +181,13 @@ const Core = {
                     input.oninput = (e) => {
                         const v = parseFloat(e.target.value);
                         valDisplay.textContent = v;
-                        if (ctrl.onChange) ctrl.onChange(v, valDisplay);
+                        if (ctrl.live !== false && ctrl.onChange) ctrl.onChange(v, valDisplay);
+                    };
+
+                    input.onchange = (e) => {
+                        const v = parseFloat(e.target.value);
+                        if (ctrl.live === false && ctrl.onChange) ctrl.onChange(v, valDisplay);
+                        if (ctrl.onCommit) ctrl.onCommit(v, valDisplay);
                     };
                 } else if (ctrl.type === 'button') {
                      row.style.textAlign = 'center';
