@@ -529,10 +529,10 @@ const SquareMazeCase = {
                 if (fill) {
                     ctx.fillStyle = fill;
                     ctx.fillRect(
-                        ox + x * this.cellSize + 1,
-                        oy + y * this.cellSize + 1,
-                        this.cellSize - 2,
-                        this.cellSize - 2
+                        ox + x * this.cellSize,
+                        oy + y * this.cellSize,
+                        this.cellSize,
+                        this.cellSize
                     );
                 }
             }
@@ -547,6 +547,7 @@ const SquareMazeCase = {
                 const cell = this.grid[y][x];
                 const px = ox + x * this.cellSize;
                 const py = oy + y * this.cellSize;
+
                 if (!(cell.open & N)) { ctx.moveTo(px, py); ctx.lineTo(px + this.cellSize, py); }
                 if (!(cell.open & E)) { ctx.moveTo(px + this.cellSize, py); ctx.lineTo(px + this.cellSize, py + this.cellSize); }
                 if (!(cell.open & S)) { ctx.moveTo(px, py + this.cellSize); ctx.lineTo(px + this.cellSize, py + this.cellSize); }

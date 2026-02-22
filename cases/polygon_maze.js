@@ -110,7 +110,7 @@ const PolygonMazeCase = {
                 id: 'pm_theme',
                 label: 'Color Theme',
                 options: [
-                    { value: 'rainbow', label: '0. Default (Rainbow)' },
+                    { value: 'rainbow', label: '0. High Contrast' },
                     { value: 'basic', label: '1. Basic (Green/Pink)' },
                     { value: 'ocean', label: '2. Ocean (Cyan/Blue)' },
                     { value: 'sunset', label: '3. Sunset (Orange/Purple)' },
@@ -807,7 +807,17 @@ const PolygonMazeCase = {
     draw() {
         if (!this.ctx) return;
         const ctx = this.ctx;
-        const theme = MazeEngine.themes[this.config.theme] || MazeEngine.themes.ocean;
+        const theme = this.config.theme === 'rainbow'
+            ? {
+                wall: '#ffe066',
+                explored: 'rgba(255, 64, 129, 0.78)',
+                frontier: 'rgba(0, 229, 255, 0.9)',
+                start: '#39ff14',
+                goal: '#ff1744',
+                path: 'rgba(255, 214, 0, 0.34)',
+                current: '#ffffff'
+            }
+            : (MazeEngine.themes[this.config.theme] || MazeEngine.themes.ocean);
         ctx.clearRect(0, 0, this.width, this.height);
 
         // Layered background gives depth instead of a flat dark fill.

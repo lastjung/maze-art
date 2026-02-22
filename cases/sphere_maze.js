@@ -62,7 +62,7 @@ const SphereMazeCase = {
         sfxVolume: 0.1,
         searchMode: 'astar'
     },
-    sphereType: 'fibonacci',
+    sphereType: 'basic',
 
     init() {
         this.canvas = document.getElementById('mathCanvas');
@@ -95,8 +95,9 @@ const SphereMazeCase = {
                 type: 'select',
                 id: 'sm_shape',
                 label: 'Sphere Type',
-                value: this.sphereType || 'fibonacci',
+                value: this.sphereType || 'basic',
                 options: [
+                    { value: 'basic', label: 'Basic Maze (Default)' },
                     { value: 'fibonacci', label: 'Fibonacci (Even)' },
                     { value: 'latlon', label: 'Lat-Lon Bands' },
                     { value: 'cube', label: 'Cube Projection' }
@@ -175,6 +176,11 @@ const SphereMazeCase = {
                 live: false,
                 onChange: (v) => { this.config.numPoints = v; this.reset(); }
             },
+            {
+                type: 'info',
+                label: 'Effective Nodes',
+                value: `${this.points.length || this.getEffectivePointCount()}`
+            },
             { type: 'info', label: 'Start (Green)', value: 'Automatically Set' },
             { type: 'info', label: 'Goal (Red)', value: 'Automatically Set' },
             { type: 'info', label: 'Manual Rotation', value: 'Drag to Spin Sphere' },
@@ -194,7 +200,7 @@ const SphereMazeCase = {
     },
 
     generateTopology() {
-        const n = this.config.numPoints;
+        const n = this.getEffectivePointCount();
         let pts;
         if (this.sphereType === 'latlon') pts = this.generateLatLonPoints(n);
         else if (this.sphereType === 'cube') pts = this.generateCubeProjectionPoints(n);
@@ -220,6 +226,13 @@ const SphereMazeCase = {
                 if (!this.neighbors[neighborIdx].includes(i)) this.neighbors[neighborIdx].push(i);
             }
         }
+    },
+
+    getEffectivePointCount() {
+        const raw = Math.max(50, Math.floor(this.config.numPoints));
+        if (this.sphereType !== 'basic') return raw;
+        // Basic mode intentionally keeps a coarser graph for a cleaner default look.
+        return Math.max(80, Math.floor(raw * 0.62));
     },
 
     generateFibonacciPoints(n) {
