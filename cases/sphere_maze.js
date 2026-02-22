@@ -62,6 +62,7 @@ const SphereMazeCase = {
         sfxVolume: 0.1,
         searchMode: 'astar'
     },
+    sphereType: 'fibonacci',
 
     init() {
         this.canvas = document.getElementById('mathCanvas');
@@ -94,9 +95,16 @@ const SphereMazeCase = {
                 type: 'select',
                 id: 'sm_shape',
                 label: 'Sphere Type',
-                value: 'fibonacci',
-                options: [{ value: 'fibonacci', label: 'Fibonacci (Even)' }],
-                onChange: () => { this.reset(); }
+                value: this.sphereType || 'fibonacci',
+                options: [
+                    { value: 'fibonacci', label: 'Fibonacci (Even)' },
+                    { value: 'latlon', label: 'Lat-Lon Bands' },
+                    { value: 'cube', label: 'Cube Projection' }
+                ],
+                onChange: (v) => {
+                    this.sphereType = v;
+                    this.reset();
+                }
             },
             {
                 type: 'select',
@@ -180,29 +188,17 @@ const SphereMazeCase = {
         
         this.generateTopology();
         this.generateMaze();
-        
-        // Pick start/goal as polar opposites roughly
-        this.startNodeIdx = 0;
-        this.goalNodeIdx = this.points.length - 1;
+        this.pickPolarEndpoints();
         
         this.draw();
     },
 
     generateTopology() {
-        // Fibonacci Sphere points
         const n = this.config.numPoints;
-        const pts = [];
-        const ga = Math.PI * (3 - Math.sqrt(5));
-        for (let i = 0; i < n; i++) {
-            const y = 1 - (i / Math.max(1, n - 1)) * 2;
-            const r = Math.sqrt(Math.max(0, 1 - y * y));
-            const theta = ga * i;
-            pts.push({
-                x: Math.cos(theta) * r,
-                y,
-                z: Math.sin(theta) * r
-            });
-        }
+        let pts;
+        if (this.sphereType === 'latlon') pts = this.generateLatLonPoints(n);
+        else if (this.sphereType === 'cube') pts = this.generateCubeProjectionPoints(n);
+        else pts = this.generateFibonacciPoints(n);
         this.points = pts;
 
         // Build adjacency graph based on distance
@@ -218,12 +214,121 @@ const SphereMazeCase = {
             }
             dists.sort((a, b) => a.d - b.d);
             // Connect to top 6 nearest neighbors
-            for (let k = 0; k < 6; k++) {
+            for (let k = 0; k < Math.min(6, dists.length); k++) {
                 const neighborIdx = dists[k].idx;
                 if (!this.neighbors[i].includes(neighborIdx)) this.neighbors[i].push(neighborIdx);
                 if (!this.neighbors[neighborIdx].includes(i)) this.neighbors[neighborIdx].push(i);
             }
         }
+    },
+
+    generateFibonacciPoints(n) {
+        const pts = [];
+        const ga = Math.PI * (3 - Math.sqrt(5));
+        for (let i = 0; i < n; i++) {
+            const y = 1 - (i / Math.max(1, n - 1)) * 2;
+            const r = Math.sqrt(Math.max(0, 1 - y * y));
+            const theta = ga * i;
+            pts.push({
+                x: Math.cos(theta) * r,
+                y,
+                z: Math.sin(theta) * r
+            });
+        }
+        return pts;
+    },
+
+    generateLatLonPoints(n) {
+        const pts = [];
+        const bands = Math.max(10, Math.round(Math.sqrt(n) * 1.4));
+        for (let b = 0; b < bands; b++) {
+            const v = (b + 0.5) / bands;
+            const y = 1 - 2 * v;
+            const r = Math.sqrt(Math.max(0, 1 - y * y));
+            const around = Math.max(4, Math.round(2 * Math.PI * r * bands * 0.45));
+            const phase = (b % 2) * (Math.PI / around);
+            for (let j = 0; j < around; j++) {
+                const theta = (j / around) * Math.PI * 2 + phase;
+                pts.push({
+                    x: Math.cos(theta) * r,
+                    y,
+                    z: Math.sin(theta) * r
+                });
+            }
+        }
+        if (pts.length > n) return pts.slice(0, n);
+        while (pts.length < n) {
+            const t = pts.length / Math.max(1, n - 1);
+            const y = 1 - 2 * t;
+            const r = Math.sqrt(Math.max(0, 1 - y * y));
+            const theta = t * Math.PI * 12;
+            pts.push({ x: Math.cos(theta) * r, y, z: Math.sin(theta) * r });
+        }
+        return pts;
+    },
+
+    generateCubeProjectionPoints(n) {
+        const pts = [];
+        const perFace = Math.max(2, Math.ceil(n / 6));
+        const side = Math.max(2, Math.ceil(Math.sqrt(perFace)));
+        const faces = [
+            { axis: 'x', sign: 1 }, { axis: 'x', sign: -1 },
+            { axis: 'y', sign: 1 }, { axis: 'y', sign: -1 },
+            { axis: 'z', sign: 1 }, { axis: 'z', sign: -1 }
+        ];
+
+        for (const face of faces) {
+            for (let iy = 0; iy < side; iy++) {
+                for (let ix = 0; ix < side; ix++) {
+                    const u = (ix + 0.5) / side * 2 - 1;
+                    const v = (iy + 0.5) / side * 2 - 1;
+                    let x = 0;
+                    let y = 0;
+                    let z = 0;
+                    if (face.axis === 'x') { x = face.sign; y = u; z = v; }
+                    else if (face.axis === 'y') { y = face.sign; x = u; z = v; }
+                    else { z = face.sign; x = u; y = v; }
+
+                    const len = Math.hypot(x, y, z) || 1;
+                    pts.push({ x: x / len, y: y / len, z: z / len });
+                }
+            }
+        }
+
+        if (pts.length > n) return pts.slice(0, n);
+        while (pts.length < n) {
+            const t = pts.length / Math.max(1, n - 1);
+            const y = 1 - 2 * t;
+            const r = Math.sqrt(Math.max(0, 1 - y * y));
+            const theta = t * Math.PI * 10;
+            pts.push({ x: Math.cos(theta) * r, y, z: Math.sin(theta) * r });
+        }
+        return pts;
+    },
+
+    pickPolarEndpoints() {
+        if (!this.points || this.points.length === 0) {
+            this.startNodeIdx = 0;
+            this.goalNodeIdx = 0;
+            return;
+        }
+        let maxY = -Infinity;
+        let minY = Infinity;
+        let maxIdx = 0;
+        let minIdx = 0;
+        for (let i = 0; i < this.points.length; i++) {
+            const y = this.points[i].y;
+            if (y > maxY) {
+                maxY = y;
+                maxIdx = i;
+            }
+            if (y < minY) {
+                minY = y;
+                minIdx = i;
+            }
+        }
+        this.startNodeIdx = maxIdx;
+        this.goalNodeIdx = minIdx;
     },
 
     generateMaze() {
