@@ -352,33 +352,42 @@ const PolygonMazeCase = {
 
         const cx = this.width * 0.5;
         const cy = this.height * 0.5;
-        let maxR = 1;
+        const maxR = Math.min(this.width, this.height) * 0.45;
+        const turns = 3.4;
+        const samples = Math.max(220, Math.min(900, Math.floor(activeList.length * 1.1)));
 
-        const scored = activeList.map((idx) => {
-            const p = this.points[idx];
-            const dx = p.x - cx;
-            const dy = p.y - cy;
-            const r = Math.hypot(dx, dy);
-            if (r > maxR) maxR = r;
-            let angle = Math.atan2(dy, dx);
-            if (angle < 0) angle += Math.PI * 2;
-            return { idx, r, angle };
-        });
-
-        const turns = 3.2;
-        const twoPi = Math.PI * 2;
-        scored.forEach((n) => {
-            const rn = n.r / maxR;
-            n.s = n.angle + turns * twoPi * rn;
-        });
-        scored.sort((a, b) => a.s - b.s);
-
-        const targetAnchors = Math.max(30, Math.min(180, scored.length));
-        const step = Math.max(1, Math.floor(scored.length / targetAnchors));
+        // Build explicit spiral waypoints in screen space, then snap each point
+        // to the nearest active polygon center.
         const anchors = [];
-        for (let i = 0; i < scored.length; i += step) anchors.push(scored[i].idx);
-        if (anchors[anchors.length - 1] !== scored[scored.length - 1].idx) {
-            anchors.push(scored[scored.length - 1].idx);
+        const seen = new Set();
+        for (let i = 0; i <= samples; i++) {
+            const t = i / samples;
+            const theta = turns * Math.PI * 2 * t - Math.PI / 2;
+            const r = 10 + maxR * t;
+            const x = cx + Math.cos(theta) * r;
+            const y = cy + Math.sin(theta) * r;
+
+            let nearest = -1;
+            let best = Infinity;
+            for (const idx of activeList) {
+                const p = this.points[idx];
+                const d2 = (p.x - x) * (p.x - x) + (p.y - y) * (p.y - y);
+                if (d2 < best) {
+                    best = d2;
+                    nearest = idx;
+                }
+            }
+            if (nearest === -1 || seen.has(nearest)) continue;
+            seen.add(nearest);
+            anchors.push(nearest);
+        }
+        if (anchors.length < 2) {
+            // Fallback: build one random maze pass when snapping failed.
+            const prev = this.mazeShape;
+            this.mazeShape = 'random';
+            this.generateMaze();
+            this.mazeShape = prev;
+            return;
         }
 
         const carvePath = (startIdx, goalIdx) => {
@@ -407,7 +416,7 @@ const PolygonMazeCase = {
                         this.points[next].x - this.points[goalIdx].x,
                         this.points[next].y - this.points[goalIdx].y
                     );
-                    pq.put(next, newCost + h * 0.02);
+                    pq.put(next, newCost + h * 0.06);
                 }
             }
 
