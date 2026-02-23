@@ -795,6 +795,7 @@ const SphereMazeCase = {
         const theme = isRainbowVivid
             ? (MazeEngine.themes.ocean || MazeEngine.themes.rainbow)
             : (MazeEngine.themes[this.config.theme] || MazeEngine.themes.ocean);
+        const renderTheme = theme;
 
         ctx.clearRect(0, 0, width, height);
         ctx.fillStyle = '#1e1e1e';
@@ -860,6 +861,10 @@ const SphereMazeCase = {
                 grad.addColorStop(0, 'rgba(245, 248, 255, 0.42)');
                 grad.addColorStop(0.55, 'rgba(165, 176, 194, 0.36)');
                 grad.addColorStop(1, 'rgba(48, 56, 72, 0.58)');
+            } else if (this.config.theme === 'basic') {
+                grad.addColorStop(0, 'rgba(214, 255, 225, 0.32)');
+                grad.addColorStop(0.55, 'rgba(114, 176, 128, 0.28)');
+                grad.addColorStop(1, 'rgba(26, 64, 35, 0.52)');
             } else {
                 grad.addColorStop(0, 'rgba(255,255,255,0.26)');
                 grad.addColorStop(0.55, 'rgba(150, 170, 200, 0.20)');
@@ -895,7 +900,7 @@ const SphereMazeCase = {
                     ctx.lineWidth = 1.0;
                 } else {
                     // Wall
-                    ctx.strokeStyle = theme.wall;
+                    ctx.strokeStyle = renderTheme.wall;
                     ctx.lineWidth = 0.8;
                     ctx.globalAlpha = alpha * 0.2; // Walls are very subtle
                 }
@@ -916,7 +921,7 @@ const SphereMazeCase = {
             if (avgZ < -0.2) return; // Occlusion
 
             ctx.beginPath();
-            ctx.strokeStyle = theme.explored;
+            ctx.strokeStyle = renderTheme.explored;
             ctx.lineWidth = 1.5;
             // Depth-based opacity for search tree
             ctx.globalAlpha = Math.min(1.0, avgZ + 0.8);
@@ -929,7 +934,7 @@ const SphereMazeCase = {
         if (this.path.length > 1 && this.pathProgress > 0) {
             ctx.globalAlpha = 1.0;
             ctx.beginPath();
-            ctx.strokeStyle = theme.current; // Solid Red (#FF0000)
+            ctx.strokeStyle = renderTheme.current;
             ctx.lineWidth = 2.5;
             let move = true;
             for (let i = 0; i < this.pathProgress; i++) {
@@ -949,10 +954,10 @@ const SphereMazeCase = {
             
             let fill = null;
             const pathIdx = this.path.indexOf(p.idx);
-            if (pathIdx !== -1 && pathIdx < this.pathProgress) fill = theme.path;
-            else if (p.idx === this.currentIdx) fill = theme.current;
-            else if (this.explored.has(p.idx)) fill = theme.explored;
-            else if (frontierSet.has(p.idx)) fill = theme.frontier;
+            if (pathIdx !== -1 && pathIdx < this.pathProgress) fill = renderTheme.path;
+            else if (p.idx === this.currentIdx) fill = renderTheme.current;
+            else if (this.explored.has(p.idx)) fill = renderTheme.explored;
+            else if (frontierSet.has(p.idx)) fill = renderTheme.frontier;
 
             if (fill) {
                 ctx.beginPath();
@@ -969,7 +974,7 @@ const SphereMazeCase = {
             
             ctx.beginPath();
             ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
-            ctx.fillStyle = idx === this.startNodeIdx ? theme.start : theme.goal;
+            ctx.fillStyle = idx === this.startNodeIdx ? renderTheme.start : renderTheme.goal;
             ctx.fill();
             ctx.strokeStyle = '#fff';
             ctx.lineWidth = 2;
