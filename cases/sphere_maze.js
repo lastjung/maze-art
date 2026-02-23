@@ -97,8 +97,9 @@ const SphereMazeCase = {
                 label: 'Sphere Type',
                 value: this.sphereType || 'basic',
                 options: [
-                    { value: 'basic', label: 'Basic Maze (Default)' },
-                    { value: 'fibonacci', label: 'Fibonacci (Even)' },
+                    { value: 'basic', label: 'Classic Sphere' },
+                    { value: 'voronoi', label: 'Voronoi Sphere' },
+                    { value: 'fibonacci', label: 'Fibonacci Sphere' },
                     { value: 'latlon', label: 'Lat-Lon Bands' },
                     { value: 'cube', label: 'Cube Projection' }
                 ],
@@ -126,11 +127,12 @@ const SphereMazeCase = {
                 id: 'sm_theme',
                 label: 'Color Theme',
                 options: [
-                    { value: 'rainbow', label: '0. Default (Rainbow)' },
+                    { value: 'rainbow', label: '0. Monochrome' },
                     { value: 'basic', label: '1. Basic (Green/Pink)' },
                     { value: 'ocean', label: '2. Ocean (Cyan/Blue)' },
                     { value: 'sunset', label: '3. Sunset (Orange/Purple)' },
-                    { value: 'neon', label: '4. Neon (Gray/Lime)' }
+                    { value: 'neon', label: '4. Neon (Gray/Lime)' },
+                    { value: 'rainbow-vivid', label: '5. Rainbow (Vivid)' }
                 ],
                 value: this.config.theme,
                 onChange: (v) => { this.config.theme = v; this.draw(); }
@@ -207,10 +209,13 @@ const SphereMazeCase = {
         else pts = this.generateFibonacciPoints(n);
         this.points = pts;
 
-        // Build adjacency graph based on distance
-        this.neighbors = Array.from({ length: n }, () => []);
-        // Simple but expensive: check all pairs. Optimization possible but n=300-1000 is fine.
-        // For each point, find 5-7 nearest neighbors to form a graph
+        if (this.sphereType === 'voronoi') this.neighbors = this.buildSphericalVoronoiGraph(pts);
+        else this.neighbors = this.buildNearestNeighborGraph(pts, 6);
+    },
+
+    buildNearestNeighborGraph(pts, neighborCount = 6) {
+        const n = pts.length;
+        const neighbors = Array.from({ length: n }, () => []);
         for (let i = 0; i < n; i++) {
             const dists = [];
             for (let j = 0; j < n; j++) {
@@ -219,12 +224,136 @@ const SphereMazeCase = {
                 dists.push({ idx: j, d });
             }
             dists.sort((a, b) => a.d - b.d);
-            // Connect to top 6 nearest neighbors
-            for (let k = 0; k < Math.min(6, dists.length); k++) {
+            for (let k = 0; k < Math.min(neighborCount, dists.length); k++) {
                 const neighborIdx = dists[k].idx;
-                if (!this.neighbors[i].includes(neighborIdx)) this.neighbors[i].push(neighborIdx);
-                if (!this.neighbors[neighborIdx].includes(i)) this.neighbors[neighborIdx].push(i);
+                if (!neighbors[i].includes(neighborIdx)) neighbors[i].push(neighborIdx);
+                if (!neighbors[neighborIdx].includes(i)) neighbors[neighborIdx].push(i);
             }
+        }
+        return neighbors;
+    },
+
+    buildSphericalVoronoiGraph(pts) {
+        const n = pts.length;
+        if (n <= 1) return Array.from({ length: n }, () => []);
+        const edgeSets = Array.from({ length: n }, () => new Set());
+        const addEdge = (a, b) => {
+            if (a === b || a < 0 || b < 0 || a >= n || b >= n) return;
+            edgeSets[a].add(b);
+            edgeSets[b].add(a);
+        };
+
+        const projections = [
+            ['x', 'y'],
+            ['y', 'z'],
+            ['z', 'x']
+        ];
+
+        if (typeof Delaunator !== 'undefined') {
+            for (const [a, b] of projections) {
+                const coords = new Float64Array(n * 2);
+                for (let i = 0; i < n; i++) {
+                    coords[i * 2] = pts[i][a];
+                    coords[i * 2 + 1] = pts[i][b];
+                }
+                const delaunay = new Delaunator(coords);
+                for (let e = 0; e < delaunay.halfedges.length; e++) {
+                    const p = delaunay.triangles[e];
+                    const q = delaunay.triangles[e % 3 === 2 ? e - 2 : e + 1];
+                    addEdge(p, q);
+                }
+            }
+        }
+
+        const maxAngle = Math.min(1.2, Math.max(0.45, 12 / Math.sqrt(Math.max(4, n))));
+        const minDot = Math.cos(maxAngle);
+        for (let i = 0; i < n; i++) {
+            for (const j of Array.from(edgeSets[i])) {
+                if (i >= j) continue;
+                const dot = pts[i].x * pts[j].x + pts[i].y * pts[j].y + pts[i].z * pts[j].z;
+                if (dot < minDot) {
+                    edgeSets[i].delete(j);
+                    edgeSets[j].delete(i);
+                }
+            }
+        }
+
+        const sparseGraph = edgeSets.every(s => s.size < 2);
+        if (sparseGraph) this.addNearestNeighborFallback(pts, edgeSets, 6);
+
+        this.connectComponents(pts, edgeSets);
+        return edgeSets.map(s => Array.from(s));
+    },
+
+    addNearestNeighborFallback(pts, edgeSets, count = 6) {
+        for (let i = 0; i < pts.length; i++) {
+            const dists = [];
+            for (let j = 0; j < pts.length; j++) {
+                if (i === j) continue;
+                const d = (pts[i].x - pts[j].x) ** 2 + (pts[i].y - pts[j].y) ** 2 + (pts[i].z - pts[j].z) ** 2;
+                dists.push({ idx: j, d });
+            }
+            dists.sort((a, b) => a.d - b.d);
+            for (let k = 0; k < Math.min(count, dists.length); k++) {
+                const j = dists[k].idx;
+                edgeSets[i].add(j);
+                edgeSets[j].add(i);
+            }
+        }
+    },
+
+    findComponents(edgeSets) {
+        const n = edgeSets.length;
+        const visited = new Array(n).fill(false);
+        const components = [];
+
+        for (let i = 0; i < n; i++) {
+            if (visited[i]) continue;
+            const comp = [];
+            const stack = [i];
+            visited[i] = true;
+            while (stack.length > 0) {
+                const curr = stack.pop();
+                comp.push(curr);
+                for (const next of edgeSets[curr]) {
+                    if (!visited[next]) {
+                        visited[next] = true;
+                        stack.push(next);
+                    }
+                }
+            }
+            components.push(comp);
+        }
+        return components;
+    },
+
+    connectComponents(pts, edgeSets) {
+        let components = this.findComponents(edgeSets);
+        if (components.length <= 1) return;
+
+        while (components.length > 1) {
+            const base = components[0];
+            let bestA = -1;
+            let bestB = -1;
+            let bestDot = -Infinity;
+
+            for (let c = 1; c < components.length; c++) {
+                for (const a of base) {
+                    for (const b of components[c]) {
+                        const dot = pts[a].x * pts[b].x + pts[a].y * pts[b].y + pts[a].z * pts[b].z;
+                        if (dot > bestDot) {
+                            bestDot = dot;
+                            bestA = a;
+                            bestB = b;
+                        }
+                    }
+                }
+            }
+
+            if (bestA === -1 || bestB === -1) break;
+            edgeSets[bestA].add(bestB);
+            edgeSets[bestB].add(bestA);
+            components = this.findComponents(edgeSets);
         }
     },
 
@@ -634,6 +763,26 @@ const SphereMazeCase = {
         return { x, y: yFinal, z: zFinal };
     },
 
+    nearestSeedIndex(v, rotatedSeeds) {
+        let best = 0;
+        let bestDot = -Infinity;
+        for (let i = 0; i < rotatedSeeds.length; i++) {
+            const s = rotatedSeeds[i];
+            const dot = v.x * s.x + v.y * s.y + v.z * s.z;
+            if (dot > bestDot) {
+                bestDot = dot;
+                best = i;
+            }
+        }
+        return best;
+    },
+
+    vividColorForSeed(index, alpha = 1) {
+        const hue = (index * 137.5) % 360;
+        const a = Math.max(0, Math.min(1, alpha));
+        return `hsla(${hue.toFixed(1)}, 88%, 62%, ${a})`;
+    },
+
     draw() {
         if (!this.ctx || !this.points || this.points.length === 0) return;
         const ctx = this.ctx;
@@ -642,20 +791,14 @@ const SphereMazeCase = {
         const cx = width / 2;
         const cy = height / 2;
         const r = Math.min(width, height) * 0.4;
-        const theme = MazeEngine.themes[this.config.theme] || MazeEngine.themes.ocean;
+        const isRainbowVivid = this.config.theme === 'rainbow-vivid';
+        const theme = isRainbowVivid
+            ? (MazeEngine.themes.ocean || MazeEngine.themes.rainbow)
+            : (MazeEngine.themes[this.config.theme] || MazeEngine.themes.ocean);
 
         ctx.clearRect(0, 0, width, height);
         ctx.fillStyle = '#1e1e1e';
         ctx.fillRect(0, 0, width, height);
-
-        // Draw Sphere shadow/glow
-        const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-        grad.addColorStop(0, 'rgba(255,255,255,0.05)');
-        grad.addColorStop(1, 'rgba(0,0,0,0.2)');
-        ctx.fillStyle = grad;
-        ctx.beginPath();
-        ctx.arc(cx, cy, r, 0, Math.PI * 2);
-        ctx.fill();
 
         // Project points
         const projected = this.points.map((p, i) => {
@@ -669,9 +812,65 @@ const SphereMazeCase = {
             };
         });
 
-        // Sort items by depth for simple painter's algorithm
-        // We'll draw back edges first, then front edges
-        
+        const visiblePath = new Set(this.path.slice(0, this.pathProgress));
+        const frontierSet = new Set(this.frontier);
+        const rotatedSeeds = projected.map(p => p.rot);
+
+        if (isRainbowVivid) {
+            const step = Math.max(1, Math.round(r * 0.006));
+            const x0 = Math.floor(cx - r);
+            const y0 = Math.floor(cy - r);
+            const x1 = Math.ceil(cx + r);
+            const y1 = Math.ceil(cy + r);
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(cx, cy, r, 0, Math.PI * 2);
+            ctx.clip();
+            for (let gy = y0; gy <= y1; gy += step) {
+                for (let gx = x0; gx <= x1; gx += step) {
+                    const nx = (gx - cx) / r;
+                    const ny = (gy - cy) / r;
+                    const rr = nx * nx + ny * ny;
+                    if (rr > 1) continue;
+                    const nz = Math.sqrt(Math.max(0, 1 - rr));
+                    const idx = this.nearestSeedIndex({ x: nx, y: ny, z: nz }, rotatedSeeds);
+                    const alpha = 0.26 + (1 - rr) * 0.28;
+                    ctx.fillStyle = this.vividColorForSeed(idx, alpha);
+                    ctx.fillRect(gx, gy, step, step);
+                }
+            }
+            const shade = ctx.createRadialGradient(cx - r * 0.2, cy - r * 0.35, r * 0.18, cx, cy, r * 1.1);
+            shade.addColorStop(0, 'rgba(255,255,255,0.12)');
+            shade.addColorStop(0.45, 'rgba(255,255,255,0.02)');
+            shade.addColorStop(1, 'rgba(0,0,0,0.16)');
+            ctx.fillStyle = shade;
+            ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+            ctx.restore();
+        } else {
+            // Draw Sphere body with stronger contrast against dark background.
+            const grad = ctx.createRadialGradient(
+                cx - r * 0.22,
+                cy - r * 0.28,
+                r * 0.08,
+                cx,
+                cy,
+                r
+            );
+            if (this.config.theme === 'rainbow') {
+                grad.addColorStop(0, 'rgba(245, 248, 255, 0.42)');
+                grad.addColorStop(0.55, 'rgba(165, 176, 194, 0.36)');
+                grad.addColorStop(1, 'rgba(48, 56, 72, 0.58)');
+            } else {
+                grad.addColorStop(0, 'rgba(255,255,255,0.26)');
+                grad.addColorStop(0.55, 'rgba(150, 170, 200, 0.20)');
+                grad.addColorStop(1, 'rgba(25, 32, 46, 0.46)');
+            }
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(cx, cy, r, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
         // 1. Draw Edges (Layered)
         ctx.lineCap = 'round';
         
@@ -687,7 +886,6 @@ const SphereMazeCase = {
                 if (avgZ < -0.4) return; // Occlusion
 
                 ctx.beginPath();
-                // Front-facing lines are much brighter
                 const alpha = Math.max(0.1, (avgZ + 0.5));
                 ctx.globalAlpha = alpha;
 
@@ -707,7 +905,7 @@ const SphereMazeCase = {
                 ctx.stroke();
             });
         }
-
+        
         // Layer 2: Search Tree (Explored Edges from parentMap)
         ctx.globalAlpha = 1.0;
         this.parentMap.forEach((parentIdx, childIdx) => {
@@ -754,7 +952,7 @@ const SphereMazeCase = {
             if (pathIdx !== -1 && pathIdx < this.pathProgress) fill = theme.path;
             else if (p.idx === this.currentIdx) fill = theme.current;
             else if (this.explored.has(p.idx)) fill = theme.explored;
-            else if (this.frontier.includes(p.idx)) fill = theme.frontier;
+            else if (frontierSet.has(p.idx)) fill = theme.frontier;
 
             if (fill) {
                 ctx.beginPath();
