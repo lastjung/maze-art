@@ -43,6 +43,9 @@ const SphereMazeCase = {
     rotationSpeed: 0.15,
     isCoreRunning: false,
     
+    // Tracking Smoothing State
+    trackingHistory: [],
+
     // Interaction state
     isDragging: false,
     lastMouseX: 0,
@@ -54,15 +57,24 @@ const SphereMazeCase = {
     
     // Config
     config: {
-        numPoints: 300,
+        numPoints: 800,
         theme: 'ocean',
-        speed: 40,
+        speed: 30,
         solutionSpeed: 70, // Default path reveal speed
         sfxEnabled: true,
         sfxVolume: 0.1,
-        searchMode: 'astar'
+        searchMode: 'astar',
+        autoTrack: true
     },
     sphereType: 'basic',
+
+    toggleTracking() {
+        this.config.autoTrack = !this.config.autoTrack;
+    },
+    
+    isTrackingEnabled() {
+        return this.config.autoTrack;
+    },
 
     init() {
         this.canvas = document.getElementById('mathCanvas');
@@ -858,17 +870,29 @@ const SphereMazeCase = {
                 r
             );
             if (this.config.theme === 'rainbow') {
-                grad.addColorStop(0, 'rgba(245, 248, 255, 0.42)');
-                grad.addColorStop(0.55, 'rgba(165, 176, 194, 0.36)');
-                grad.addColorStop(1, 'rgba(48, 56, 72, 0.58)');
+                grad.addColorStop(0, 'rgba(255, 255, 255, 0.85)');
+                grad.addColorStop(0.55, 'rgba(180, 180, 180, 0.8)');
+                grad.addColorStop(1, 'rgba(60, 60, 60, 0.8)');
             } else if (this.config.theme === 'basic') {
-                grad.addColorStop(0, 'rgba(214, 255, 225, 0.32)');
-                grad.addColorStop(0.55, 'rgba(114, 176, 128, 0.28)');
-                grad.addColorStop(1, 'rgba(26, 64, 35, 0.52)');
+                grad.addColorStop(0, 'rgba(120, 255, 150, 0.85)'); // Bright minty center
+                grad.addColorStop(0.55, 'rgba(40, 200, 80, 0.8)');   // Vibrant middle green
+                grad.addColorStop(1, 'rgba(10, 100, 30, 0.8)');      // Clean dark green edge
+            } else if (this.config.theme === 'ocean') {
+                grad.addColorStop(0, 'rgba(80, 200, 230, 0.85)');    // Bright soft cyan top
+                grad.addColorStop(0.55, 'rgba(40, 150, 180, 0.8)');  // Medium teal
+                grad.addColorStop(1, 'rgba(10, 80, 110, 0.8)');      // Distinct dark cyan edge
+            } else if (this.config.theme === 'sunset') {
+                grad.addColorStop(0, 'rgba(255, 200, 150, 0.85)');
+                grad.addColorStop(0.55, 'rgba(255, 120, 60, 0.8)');
+                grad.addColorStop(1, 'rgba(120, 20, 80, 0.8)');
+            } else if (this.config.theme === 'neon') {
+                grad.addColorStop(0, 'rgba(160, 160, 160, 0.85)');
+                grad.addColorStop(0.55, 'rgba(80, 80, 80, 0.8)');
+                grad.addColorStop(1, 'rgba(20, 20, 20, 0.8)');
             } else {
-                grad.addColorStop(0, 'rgba(255,255,255,0.26)');
-                grad.addColorStop(0.55, 'rgba(150, 170, 200, 0.20)');
-                grad.addColorStop(1, 'rgba(25, 32, 46, 0.46)');
+                grad.addColorStop(0, 'rgba(200, 200, 200, 0.85)');
+                grad.addColorStop(0.55, 'rgba(100, 100, 100, 0.8)');
+                grad.addColorStop(1, 'rgba(40, 40, 40, 0.8)');
             }
             ctx.fillStyle = grad;
             ctx.beginPath();
@@ -896,13 +920,13 @@ const SphereMazeCase = {
 
                 if (isOpen) {
                     // Unvisited Open Path - Subtle and thinner to reduce noise during rotation
-                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+                    ctx.strokeStyle = !isRainbowVivid ? 'rgba(255, 255, 255, 0.9)' : 'rgba(255, 255, 255, 0.3)';
                     ctx.lineWidth = 1.0;
                 } else {
                     // Wall
-                    ctx.strokeStyle = renderTheme.wall;
+                    ctx.strokeStyle = !isRainbowVivid ? 'rgba(255, 255, 255, 0.5)' : renderTheme.wall;
                     ctx.lineWidth = 0.8;
-                    ctx.globalAlpha = alpha * 0.2; // Walls are very subtle
+                    ctx.globalAlpha = !isRainbowVivid ? alpha * 0.4 : alpha * 0.2; // Walls are very subtle
                 }
 
                 ctx.moveTo(p1.x, p1.y);
@@ -1024,10 +1048,78 @@ const SphereMazeCase = {
                 const dt = Math.min(0.05, (now - this.lastTimeMs) / 1000);
                 this.lastTimeMs = now;
                 
-                // Slowly rotate if NOT dragging
+                // Auto track active search/path, or idle rotate
+                let activePoint = null;
+                let trackActive = false;
+
+                if (this.config.autoTrack) {
+                    if (this.searchInProgress && this.currentIdx !== null && this.points[this.currentIdx]) {
+                        activePoint = this.points[this.currentIdx];
+                        trackActive = true; // Still finding
+                    } else if (this.path && this.path.length > 0 && this.pathProgress > 0 && this.pathProgress <= this.path.length) {
+                        // Following the final path
+                        let idx = Math.min(this.path.length - 1, this.pathProgress - 1);
+                        activePoint = this.points[this.path[idx]];
+                        trackActive = true; 
+                    }
+                }
+
                 if (!this.isDragging) {
-                    this.rotY += this.rotationSpeed * dt;
-                    this.rotX += this.rotationSpeed * dt * 0.4;
+                    if (trackActive && activePoint) {
+                        // Add active point to tracking history (max 5 frames for moving average)
+                        this.trackingHistory.push({x: activePoint.x, y: activePoint.y, z: activePoint.z});
+                        if (this.trackingHistory.length > 5) {
+                            this.trackingHistory.shift();
+                        }
+
+                        // Calculate moving average
+                        let avgX = 0, avgY = 0, avgZ = 0;
+                        for (let p of this.trackingHistory) {
+                            avgX += p.x; avgY += p.y; avgZ += p.z;
+                        }
+                        avgX /= this.trackingHistory.length;
+                        avgY /= this.trackingHistory.length;
+                        avgZ /= this.trackingHistory.length;
+                        
+                        let smoothedPoint = {x: avgX, y: avgY, z: avgZ};
+
+                        // Check if active point is already within 2/3 of the front center (safe zone)
+                        let viewP = this.rotatePoint(smoothedPoint, this.rotX, this.rotY);
+                        // viewP.x, viewP.y are between -1 and 1. 2/3 is approximately 0.667.
+                        if (viewP.z > 0 && Math.hypot(viewP.x, viewP.y) < 0.667) {
+                            // Inside safe zone: don't track it, act like we're idle to give the user time to watch
+                            this.rotY += this.rotationSpeed * dt * 0.1; 
+                        } else {
+                            // Outside safe zone: track it to bring it back towards the center
+                            // Use a non-linear, "lazy" tracking curve to absorb high-frequency shaking from A* search jumps
+                            const trackSpeed = 2.0; 
+                            
+                            let zNew = Math.hypot(smoothedPoint.x, smoothedPoint.z);
+                            if (zNew > 0.001) {
+                                let targetAngleY = Math.atan2(-smoothedPoint.x, smoothedPoint.z);
+                                let dY = targetAngleY - this.rotY;
+                                dY = Math.atan2(Math.sin(dY), Math.cos(dY));
+                                
+                                // Power curve (e.g., 1.5) creates a natural "deadzone". 
+                                // Small angle changes cause almost 0 movement, stopping the shaking.
+                                let easeY = Math.sign(dY) * Math.pow(Math.abs(dY), 1.6) * trackSpeed;
+                                this.rotY += easeY * dt;
+                            }
+                            
+                            let targetAngleX = Math.atan2(smoothedPoint.y, zNew);
+                            let dX = targetAngleX - this.rotX;
+                            dX = Math.atan2(Math.sin(dX), Math.cos(dX));
+                            
+                            let easeX = Math.sign(dX) * Math.pow(Math.abs(dX), 1.6) * trackSpeed;
+                            this.rotX += easeX * dt;
+                        }
+                        
+                    } else {
+                        // Slowly rotate when idle
+                        this.trackingHistory = []; // Reset history when idle
+                        this.rotY += this.rotationSpeed * dt;
+                        this.rotX += this.rotationSpeed * dt * 0.4;
+                    }
                     this.clampPitch();
                 }
                 

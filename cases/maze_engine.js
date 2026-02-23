@@ -47,17 +47,17 @@ const MazeEngine = {
     themes: {
         rainbow: {
             wall: '#FFFFFF',        // Dynamically overridden by hsl in the render loop
-            explored: 'rgba(255, 255, 255, 0.1)',    // Very subtle white
-            frontier: 'rgba(255, 255, 255, 0.25)',   // Slightly brighter white
+            explored: '#FFFFFF',    // White
+            frontier: '#FFFFFF',    // White
             start: '#00FF00',       // Bright Green
             goal: '#FF0000',        // Universal Red Goal
-            path: 'rgba(255, 255, 255, 0.45)', // White tinted path cells
-            current: '#FFFFFF'      // Pure white path LINE
+            path: 'rgba(0, 0, 0, 0.65)', // Black tinted path cells
+            current: '#000000'      // Pure black path LINE
         },
         basic: {
             wall: '#86efac',        // Green
-            explored: '#ec4899',    // Pink
-            frontier: '#f472b6',    // Light Pink
+            explored: '#FFFF00',    // Pure Yellow
+            frontier: '#FFFF00',    // Pure Yellow
             start: '#00CC00',       // Bright Green
             goal: '#FF0000',        // Red
             path: 'rgba(255, 0, 0, 0.45)', // Red (like Ocean theme)
@@ -65,12 +65,12 @@ const MazeEngine = {
         },
         ocean: {
             wall: '#22d3ee',        // Cyan (Sky Blue)
-            explored: '#3b82f6',    // Blue
-            frontier: '#93c5fd',    // Light Blue
+            explored: '#FFFF00',    // Pure Yellow
+            frontier: '#FFFF00',    // Pure Yellow
             start: '#0891b2',       // Dark Cyan
-            goal: '#FF0000',        // Universal Red Goal for visibility
-            path: 'rgba(255, 0, 0, 0.45)', // Red tinted path cells
-            current: '#FF0000'      // Red path LINE
+            goal: '#FF0000',        // Universal Red Goal
+            path: 'rgba(255, 0, 0, 0.45)', // Red tinted path cells (Final Path 面)
+            current: '#FF0000'      // Red path LINE (Final Path 线/Current Head)
         },
         sunset: {
             wall: '#fdba74',        // Light Orange
@@ -83,12 +83,12 @@ const MazeEngine = {
         },
         neon: {
             wall: '#f3f4f6',        // Light Gray wall
-            explored: '#4d7c0f',    // Dark Lime search
-            frontier: '#84cc16',    // Bright Lime frontier
+            explored: '#00FF00',    // Bright Green
+            frontier: '#00FF00',    // Bright Green
             start: '#1f2937', 
             goal: '#FF0000',        // Red
-            path: 'rgba(132, 204, 22, 0.2)', // Light lime tint for cells
-            current: '#FFD700'      // Yellow for the path LINE
+            path: 'rgba(255, 20, 147, 0.55)', // Pink tint for cells
+            current: '#FF00FF'      // Magenta/Pink for the path LINE
         }
     },
 

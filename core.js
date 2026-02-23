@@ -143,9 +143,16 @@ const Core = {
                         ${(() => { const s = this.getPlayLabel(); return s.icon + ' ' + s.text; })()}
                     </button>
                 </div>
-                <button class="btn-secondary" id="sidebar-bgm" style="width:100%; margin-top:8px; font-size:0.8rem;">
-                    ${(this.currentCase && typeof this.currentCase.caseAudioLabel === 'function') ? this.currentCase.caseAudioLabel() : 'BGM'}: ${(this.currentCase && typeof this.currentCase.isCaseAudioMuted === 'function') ? (this.currentCase.isCaseAudioMuted() ? 'OFF' : 'ON') : (window.audioManager && !window.audioManager.isMuted ? 'ON' : 'OFF')}
-                </button>
+                <div style="display:grid; grid-template-columns: ${this.currentCase && typeof this.currentCase.toggleTracking === 'function' ? '1fr 1fr' : '1fr'}; gap:8px; margin-top:8px;">
+                    <button class="btn-secondary" id="sidebar-bgm" style="width:100%; font-size:0.8rem;">
+                        ${(this.currentCase && typeof this.currentCase.caseAudioLabel === 'function') ? this.currentCase.caseAudioLabel() : 'BGM'}: ${(this.currentCase && typeof this.currentCase.isCaseAudioMuted === 'function') ? (this.currentCase.isCaseAudioMuted() ? 'OFF' : 'ON') : (window.audioManager && !window.audioManager.isMuted ? 'ON' : 'OFF')}
+                    </button>
+                    ${this.currentCase && typeof this.currentCase.toggleTracking === 'function' ? `
+                    <button class="btn-secondary" id="sidebar-track" style="width:100%; font-size:0.8rem;">
+                        Track: ${this.currentCase.isTrackingEnabled() ? 'ON' : 'OFF'}
+                    </button>
+                    ` : ''}
+                </div>
             `;
             panel.appendChild(globalGroup);
 
@@ -155,6 +162,14 @@ const Core = {
                 this.toggleAudio();
                 this.updateControls(); // Refresh button text
             };
+            
+            const trackBtn = panel.querySelector('#sidebar-track');
+            if (trackBtn) {
+                trackBtn.onclick = () => {
+                    if (this.currentCase.toggleTracking) this.currentCase.toggleTracking();
+                    this.updateControls();
+                };
+            }
         }
 
         if (this.currentCase && this.currentCase.uiConfig) {
