@@ -8,12 +8,12 @@ const HexMazeCase = {
     ctx: null,
 
     // Config
-    hexSize: 8,
+    hexSize: 5,
     gridRadius: 25,
     searchMode: 'astar', // astar | dijkstra | greedy | bfs | dfs
     searchDelayMs: 35,
     sfxEnabled: true,
-    sfxVolume: 0.08,
+    sfxVolume: 0.1,
 
     // Graph State
     startNode: { q: 0, r: 0 },

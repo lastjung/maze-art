@@ -16,7 +16,7 @@ const SquareMazeCase = {
     solutionSpeed: 70,
     colorTheme: 'ocean',
     sfxEnabled: true,
-    sfxVolume: 0.08,
+    sfxVolume: 0.1,
 
     grid: [],
     startNode: { x: 0, y: 0 },

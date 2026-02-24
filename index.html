@@ -10,11 +10,16 @@
   </head>
   <body>
     <div class="container">
-      <nav class="case-tabs">
-        <div class="tab-group" data-group="interactive">
+      <nav class="case-tabs" id="main-nav">
+        <button id="hamburger-btn" class="hamburger-btn" aria-label="Menu">
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+        <div class="tab-group" data-group="interactive" id="mobile-menu">
           <span class="group-label">Interactive</span>
           <div class="tab-row">
-            <div class="tab active" id="tab-hex" data-case="hex-maze">Hexagon Maze</div>
+            <div class="tab active" data-case="hex-maze">Hexagon Maze</div>
             <div class="tab" data-case="fibonacci-maze">Fibonacci Maze</div>
             <div class="tab" data-case="circular">Circular Obstacles</div>
             <div class="tab" data-case="square-maze">Square Maze</div>

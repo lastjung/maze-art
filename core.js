@@ -70,6 +70,33 @@ const Core = {
         }
         this.updateCinematicButton();
         
+        // 4. Hamburger Menu Logic
+        const hamburger = document.getElementById('hamburger-btn');
+        const menu = document.getElementById('mobile-menu');
+        if (hamburger && menu) {
+            hamburger.onclick = (e) => {
+                e.stopPropagation();
+                hamburger.classList.toggle('active');
+                menu.classList.toggle('active');
+            };
+
+            // Close menu when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!menu.contains(e.target) && !hamburger.contains(e.target) && menu.classList.contains('active')) {
+                    hamburger.classList.remove('active');
+                    menu.classList.remove('active');
+                }
+            });
+
+            // Close menu when a tab is clicked
+            menu.querySelectorAll('.tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    hamburger.classList.remove('active');
+                    menu.classList.remove('active');
+                });
+            });
+        }
+        
         // Auto-initialize audio on first interaction
         const initAudio = () => {
              // Start audio only when the app is running to avoid pause-click race.
@@ -129,7 +156,7 @@ const Core = {
             globalGroup.className = 'setting-item';
             globalGroup.style.marginBottom = '16px';
             globalGroup.style.paddingBottom = '16px';
-            globalGroup.style.borderBottom = '1px solid #eee';
+            globalGroup.style.borderBottom = '1px solid var(--glass-border)';
             
             globalGroup.innerHTML = `
                 <div class="setting-header" style="margin-bottom:12px;">

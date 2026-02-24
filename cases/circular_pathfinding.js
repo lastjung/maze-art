@@ -29,7 +29,7 @@ const CircularPathfindingCase = {
     searchGoalRef: null,
     audioCtx: null,
     sfxEnabled: true,
-    sfxVolume: 0.08,
+    sfxVolume: 0.1,
     stepSoundTick: 0,
     lastStepSoundAt: 0,
     solutionSpeed: 70,
