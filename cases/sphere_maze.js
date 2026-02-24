@@ -76,6 +76,14 @@ const SphereMazeCase = {
         return this.config.autoTrack;
     },
 
+    isCaseAudioMuted() {
+        return !this.config.sfxEnabled;
+    },
+
+    toggleCaseAudio() {
+        this.config.sfxEnabled = !this.config.sfxEnabled;
+    },
+
     init() {
         this.canvas = document.getElementById('mathCanvas');
         if (!this.canvas) return;
@@ -719,7 +727,7 @@ const SphereMazeCase = {
 
         if (this.pathProgress < this.path.length) {
             // Faster speed mapping: use power to make high speeds much faster
-            const step = Math.ceil(Math.pow(this.config.solutionSpeed / 25, 2));
+            const step = Math.ceil(Math.pow(this.config.solutionSpeed / 25, 2) * 0.5);
             this.pathProgress = Math.min(this.path.length, this.pathProgress + step);
             
             const delay = Math.max(1, 150 - this.config.solutionSpeed * 1.4);
