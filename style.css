@@ -314,6 +314,11 @@ body.recording-mode .btn-secondary {
   display: none;
 }
 
+body.recording-mode .case-tabs,
+body.recording-mode .hamburger-btn {
+  display: none !important;
+}
+
 body.recording-mode .canvas-container {
   border: none;
   background: var(--brilliant-bg-dark);
@@ -387,18 +392,19 @@ body.recording-mode .canvas-container {
     display: none;
     position: fixed;
     left: 50%;
-    bottom: 80px;
-    transform: translate(-50%, 20px);
+    top: 74px;
+    bottom: auto;
+    transform: translate(-50%, -20px);
     width: min(94vw, 500px);
     flex-direction: column;
     align-items: stretch;
-    background: transparent !important;
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
-    border: none !important;
+    background: rgba(15, 15, 18, 0.95) !important;
+    backdrop-filter: blur(18px) !important;
+    -webkit-backdrop-filter: blur(18px) !important;
+    border: 1px solid var(--glass-border) !important;
     padding: 16px 12px;
     margin-top: 0;
-    box-shadow: none !important;
+    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.45) !important;
     opacity: 0;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     pointer-events: none;
@@ -492,6 +498,88 @@ body.recording-mode .canvas-container {
 
   .controls-shell {
     display: none !important;
+  }
+
+}
+
+/* Mobile/Tablet Bottom Menu (Dock + Settings Panel) */
+@media (max-width: 1024px) {
+  #floating-dock-container {
+    bottom: 16px;
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  #settings-panel {
+    bottom: 78px;
+    width: min(92vw, 420px);
+    max-height: min(34vh, 252px);
+    padding: 8px 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  body.settings-open #floating-dock-container {
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+  }
+
+  body.settings-open #settings-panel {
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  body.settings-open #settings-panel .setting-header,
+  body.settings-open #settings-panel .setting-header label,
+  body.settings-open #settings-panel .setting-info-label,
+  body.settings-open #settings-panel .setting-info-value,
+  body.settings-open #settings-panel .setting-value {
+    color: #cbd5e1;
+  }
+
+  body.settings-open #settings-panel .setting-item {
+    gap: 4px;
+    margin-bottom: 0;
+  }
+
+  body.settings-open #settings-panel .setting-header {
+    font-size: 0.78rem;
+  }
+
+  body.settings-open #settings-panel .setting-info-label,
+  body.settings-open #settings-panel .setting-info-value,
+  body.settings-open #settings-panel .setting-value {
+    font-size: 0.72rem;
+  }
+
+  body.settings-open #settings-panel .btn-primary,
+  body.settings-open #settings-panel .btn-secondary,
+  body.settings-open #settings-panel .setting-select {
+    border-color: rgba(203, 213, 225, 0.35);
+    color: #e2e8f0;
+    background: rgba(148, 163, 184, 0.06);
+    font-size: 0.72rem;
+    padding: 6px 10px;
+  }
+
+  body.settings-open #settings-panel input[type="range"]::-webkit-slider-thumb {
+    background: #d1d5db;
+    box-shadow: none;
+    border: 2px solid rgba(255, 255, 255, 0.9);
+  }
+
+  body.settings-open #settings-panel input[type="range"]::-webkit-slider-runnable-track {
+    background: rgba(203, 213, 225, 0.2);
+  }
+
+  body.settings-open #settings-panel::-webkit-scrollbar {
+    display: none;
   }
 }
 

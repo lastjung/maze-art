@@ -278,7 +278,9 @@ const Core = {
 
     toggleSettings() {
         const panel = document.getElementById('settings-panel');
+        if (!panel) return;
         panel.classList.toggle('visible');
+        document.body.classList.toggle('settings-open', panel.classList.contains('visible'));
     },
 
     toggleCinematicMode() {
