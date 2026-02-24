@@ -45,6 +45,10 @@ const SphereMazeCase = {
     
     // Tracking Smoothing State
     trackingHistory: [],
+    trackingSmoothedPoint: null,
+    trackingVelX: 0,
+    trackingVelY: 0,
+    trackingLocked: false,
 
     // Interaction state
     isDragging: false,
@@ -99,6 +103,123 @@ const SphereMazeCase = {
 
         this.resize();
         this.reset();
+        
+        // Start animation loop immediately for idle rotation
+        if (!this.animationId) {
+            this.lastTimeMs = null;
+            const loop = (now) => {
+                if (!this.lastTimeMs) this.lastTimeMs = now;
+                const dt = Math.min(0.05, Math.max(0, (now - this.lastTimeMs) / 1000));
+                this.lastTimeMs = now;
+                
+                // Auto track active search/path, or idle rotate
+                let activePoint = null;
+                let trackActive = false;
+
+                if (this.config.autoTrack) {
+                    if (this.searchInProgress && this.currentIdx !== null && this.points[this.currentIdx]) {
+                        activePoint = this.points[this.currentIdx];
+                        trackActive = true; 
+                    } else if (this.path && this.path.length > 0 && this.pathProgress > 0 && this.pathProgress <= this.path.length) {
+                        let idx = Math.min(this.path.length - 1, this.pathProgress - 1);
+                        activePoint = this.points[this.path[idx]];
+                        trackActive = true; 
+                    }
+                }
+
+                if (!this.isDragging) {
+                    if (trackActive && activePoint) {
+                        this.trackingHistory.push({ x: activePoint.x, y: activePoint.y, z: activePoint.z });
+                        if (this.trackingHistory.length > 6) {
+                            this.trackingHistory.shift();
+                        }
+
+                        let avgX = 0, avgY = 0, avgZ = 0;
+                        for (let p of this.trackingHistory) {
+                            avgX += p.x; avgY += p.y; avgZ += p.z;
+                        }
+                        avgX /= this.trackingHistory.length;
+                        avgY /= this.trackingHistory.length;
+                        avgZ /= this.trackingHistory.length;
+                        
+                        const averagedPoint = { x: avgX, y: avgY, z: avgZ };
+
+                        // Temporal EMA on top of moving average to absorb high-frequency jumps.
+                        if (!this.trackingSmoothedPoint) {
+                            this.trackingSmoothedPoint = { ...averagedPoint };
+                        } else {
+                            const emaAlpha = 1 - Math.exp(-dt / 0.22);
+                            this.trackingSmoothedPoint.x += (averagedPoint.x - this.trackingSmoothedPoint.x) * emaAlpha;
+                            this.trackingSmoothedPoint.y += (averagedPoint.y - this.trackingSmoothedPoint.y) * emaAlpha;
+                            this.trackingSmoothedPoint.z += (averagedPoint.z - this.trackingSmoothedPoint.z) * emaAlpha;
+                            const len = Math.hypot(this.trackingSmoothedPoint.x, this.trackingSmoothedPoint.y, this.trackingSmoothedPoint.z) || 1;
+                            this.trackingSmoothedPoint.x /= len;
+                            this.trackingSmoothedPoint.y /= len;
+                            this.trackingSmoothedPoint.z /= len;
+                        }
+
+                        const smoothedPoint = this.trackingSmoothedPoint;
+                        const viewP = this.rotatePoint(smoothedPoint, this.rotX, this.rotY);
+                        const radial = Math.hypot(viewP.x, viewP.y);
+
+                        // Hysteresis prevents rapid track/idle flip near the center boundary.
+                        const enterTrackRadius = 0.74;
+                        const exitTrackRadius = 0.58;
+                        if (!this.trackingLocked) {
+                            if (viewP.z <= 0 || radial > enterTrackRadius) this.trackingLocked = true;
+                        } else if (viewP.z > 0 && radial < exitTrackRadius) {
+                            this.trackingLocked = false;
+                        }
+
+                        if (!this.trackingLocked) {
+                            this.trackingVelX *= 0.88;
+                            this.trackingVelY *= 0.88;
+                            this.rotY += this.rotationSpeed * dt * 0.1;
+                        } else {
+                            const gain = 4.8;
+                            const maxVel = 2.2;
+                            const deadZone = 0.012;
+                            const velAlpha = 1 - Math.exp(-dt / 0.14);
+
+                            const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+                            let zNew = Math.hypot(smoothedPoint.x, smoothedPoint.z);
+                            if (zNew > 0.001) {
+                                const targetAngleY = Math.atan2(-smoothedPoint.x, smoothedPoint.z);
+                                let dY = wrap(targetAngleY - this.rotY);
+                                if (Math.abs(dY) < deadZone) dY = 0;
+                                const desiredVelY = Math.max(-maxVel, Math.min(maxVel, dY * gain));
+                                this.trackingVelY += (desiredVelY - this.trackingVelY) * velAlpha;
+                            }
+
+                            const targetAngleX = Math.atan2(smoothedPoint.y, zNew);
+                            let dX = wrap(targetAngleX - this.rotX);
+                            if (Math.abs(dX) < deadZone) dX = 0;
+                            const desiredVelX = Math.max(-maxVel, Math.min(maxVel, dX * gain));
+                            this.trackingVelX += (desiredVelX - this.trackingVelX) * velAlpha;
+
+                            this.rotY += this.trackingVelY * dt;
+                            this.rotX += this.trackingVelX * dt;
+                        }
+                    } else {
+                        this.trackingHistory = [];
+                        this.trackingSmoothedPoint = null;
+                        this.trackingLocked = false;
+                        this.trackingVelX *= 0.85;
+                        this.trackingVelY *= 0.85;
+                        this.rotY += this.rotationSpeed * dt;
+                        this.rotX += this.rotationSpeed * dt * 0.4;
+                    }
+                    this.clampPitch();
+                } else {
+                    this.trackingVelX = 0;
+                    this.trackingVelY = 0;
+                }
+                
+                this.draw();
+                this.animationId = requestAnimationFrame(loop);
+            };
+            this.animationId = requestAnimationFrame(loop);
+        }
     },
 
     resize() {
@@ -213,6 +334,11 @@ const SphereMazeCase = {
     reset() {
         this.stopSearchAnimation();
         this.clearSearchState();
+        this.trackingHistory = [];
+        this.trackingSmoothedPoint = null;
+        this.trackingLocked = false;
+        this.trackingVelX = 0;
+        this.trackingVelY = 0;
         
         this.generateTopology();
         this.generateMaze();
@@ -1045,108 +1171,14 @@ const SphereMazeCase = {
 
     start() {
         this.isCoreRunning = true;
-        if (this.found) this.reset();
-        
         if (this.searchPaused) this.resumeSearch();
         else this.startSearchAnimation();
-        
-        if (!this.animationId) {
-            this.lastTimeMs = performance.now();
-            const loop = (now) => {
-                const dt = Math.min(0.05, (now - this.lastTimeMs) / 1000);
-                this.lastTimeMs = now;
-                
-                // Auto track active search/path, or idle rotate
-                let activePoint = null;
-                let trackActive = false;
-
-                if (this.config.autoTrack) {
-                    if (this.searchInProgress && this.currentIdx !== null && this.points[this.currentIdx]) {
-                        activePoint = this.points[this.currentIdx];
-                        trackActive = true; // Still finding
-                    } else if (this.path && this.path.length > 0 && this.pathProgress > 0 && this.pathProgress <= this.path.length) {
-                        // Following the final path
-                        let idx = Math.min(this.path.length - 1, this.pathProgress - 1);
-                        activePoint = this.points[this.path[idx]];
-                        trackActive = true; 
-                    }
-                }
-
-                if (!this.isDragging) {
-                    if (trackActive && activePoint) {
-                        // Add active point to tracking history (max 5 frames for moving average)
-                        this.trackingHistory.push({x: activePoint.x, y: activePoint.y, z: activePoint.z});
-                        if (this.trackingHistory.length > 5) {
-                            this.trackingHistory.shift();
-                        }
-
-                        // Calculate moving average
-                        let avgX = 0, avgY = 0, avgZ = 0;
-                        for (let p of this.trackingHistory) {
-                            avgX += p.x; avgY += p.y; avgZ += p.z;
-                        }
-                        avgX /= this.trackingHistory.length;
-                        avgY /= this.trackingHistory.length;
-                        avgZ /= this.trackingHistory.length;
-                        
-                        let smoothedPoint = {x: avgX, y: avgY, z: avgZ};
-
-                        // Check if active point is already within 2/3 of the front center (safe zone)
-                        let viewP = this.rotatePoint(smoothedPoint, this.rotX, this.rotY);
-                        // viewP.x, viewP.y are between -1 and 1. 2/3 is approximately 0.667.
-                        if (viewP.z > 0 && Math.hypot(viewP.x, viewP.y) < 0.667) {
-                            // Inside safe zone: don't track it, act like we're idle to give the user time to watch
-                            this.rotY += this.rotationSpeed * dt * 0.1; 
-                        } else {
-                            // Outside safe zone: track it to bring it back towards the center
-                            // Use a non-linear, "lazy" tracking curve to absorb high-frequency shaking from A* search jumps
-                            const trackSpeed = 2.0; 
-                            
-                            let zNew = Math.hypot(smoothedPoint.x, smoothedPoint.z);
-                            if (zNew > 0.001) {
-                                let targetAngleY = Math.atan2(-smoothedPoint.x, smoothedPoint.z);
-                                let dY = targetAngleY - this.rotY;
-                                dY = Math.atan2(Math.sin(dY), Math.cos(dY));
-                                
-                                // Power curve (e.g., 1.5) creates a natural "deadzone". 
-                                // Small angle changes cause almost 0 movement, stopping the shaking.
-                                let easeY = Math.sign(dY) * Math.pow(Math.abs(dY), 1.6) * trackSpeed;
-                                this.rotY += easeY * dt;
-                            }
-                            
-                            let targetAngleX = Math.atan2(smoothedPoint.y, zNew);
-                            let dX = targetAngleX - this.rotX;
-                            dX = Math.atan2(Math.sin(dX), Math.cos(dX));
-                            
-                            let easeX = Math.sign(dX) * Math.pow(Math.abs(dX), 1.6) * trackSpeed;
-                            this.rotX += easeX * dt;
-                        }
-                        
-                    } else {
-                        // Slowly rotate when idle
-                        this.trackingHistory = []; // Reset history when idle
-                        this.rotY += this.rotationSpeed * dt;
-                        this.rotX += this.rotationSpeed * dt * 0.4;
-                    }
-                    this.clampPitch();
-                }
-                
-                this.draw();
-                this.animationId = requestAnimationFrame(loop);
-            };
-            this.animationId = requestAnimationFrame(loop);
-        }
     },
 
     stop() {
         this.isCoreRunning = false;
         if (this.searchInProgress) this.pauseSearch();
         else this.stopSearchAnimation();
-        
-        if (this.animationId) {
-            cancelAnimationFrame(this.animationId);
-            this.animationId = null;
-        }
     },
 
     startPausedOnLoad: true,
@@ -1154,6 +1186,10 @@ const SphereMazeCase = {
 
     destroy() {
         this.stop();
+        if (this.animationId) {
+            cancelAnimationFrame(this.animationId);
+            this.animationId = null;
+        }
         this.canvas.removeEventListener('mousedown', this.handleMouseDown);
         window.removeEventListener('mousemove', this.handleMouseMove);
         window.removeEventListener('mouseup', this.handleMouseUp);
