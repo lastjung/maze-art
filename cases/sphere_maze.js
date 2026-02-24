@@ -50,6 +50,16 @@ const SphereMazeCase = {
     trackingVelY: 0,
     trackingLocked: false,
 
+    // Rainbow-vivid performance cache (used only in rainbow-vivid theme)
+    vividCacheCanvas: null,
+    vividCacheCtx: null,
+    vividCacheRadius: 0,
+    vividCacheRotX: 0,
+    vividCacheRotY: 0,
+    vividCachePointCount: 0,
+    vividCacheTick: 0,
+    vividCacheDirty: true,
+
     // Interaction state
     isDragging: false,
     lastMouseX: 0,
@@ -125,6 +135,12 @@ const SphereMazeCase = {
                         activePoint = this.points[this.path[idx]];
                         trackActive = true; 
                     }
+                }
+
+                // After solution reveal is complete, return to idle auto-rotation.
+                if (this.found && !this.searchInProgress && this.pathProgress >= this.path.length) {
+                    trackActive = false;
+                    activePoint = null;
                 }
 
                 if (!this.isDragging) {
@@ -339,6 +355,7 @@ const SphereMazeCase = {
         this.trackingLocked = false;
         this.trackingVelX = 0;
         this.trackingVelY = 0;
+        this.vividCacheDirty = true;
         
         this.generateTopology();
         this.generateMaze();
@@ -937,6 +954,7 @@ const SphereMazeCase = {
         const cx = width / 2;
         const cy = height / 2;
         const r = Math.min(width, height) * 0.4;
+        const isVoronoi = this.sphereType === 'voronoi';
         const isRainbowVivid = this.config.theme === 'rainbow-vivid';
         const theme = isRainbowVivid
             ? (MazeEngine.themes.ocean || MazeEngine.themes.rainbow)
@@ -964,28 +982,63 @@ const SphereMazeCase = {
         const rotatedSeeds = projected.map(p => p.rot);
 
         if (isRainbowVivid) {
-            const step = Math.max(1, Math.round(r * 0.006));
-            const x0 = Math.floor(cx - r);
-            const y0 = Math.floor(cy - r);
-            const x1 = Math.ceil(cx + r);
-            const y1 = Math.ceil(cy + r);
+            const cacheSize = Math.max(24, Math.ceil(r * 2));
+            if (!this.vividCacheCanvas) {
+                this.vividCacheCanvas = document.createElement('canvas');
+                this.vividCacheCtx = this.vividCacheCanvas.getContext('2d');
+                this.vividCacheDirty = true;
+            }
+            if (this.vividCacheCanvas.width !== cacheSize || this.vividCacheCanvas.height !== cacheSize) {
+                this.vividCacheCanvas.width = cacheSize;
+                this.vividCacheCanvas.height = cacheSize;
+                this.vividCacheDirty = true;
+            }
+
+            this.vividCacheTick += 1;
+            const rotDelta = Math.abs(this.rotX - this.vividCacheRotX) + Math.abs(this.rotY - this.vividCacheRotY);
+            const isRotating = rotDelta > 0.0015;
+            const stride = this.searchInProgress ? 3 : 2;
+            const mustRefresh =
+                this.vividCacheDirty ||
+                this.vividCachePointCount !== this.points.length ||
+                rotDelta > 0.02 ||
+                (isRotating && (this.vividCacheTick % stride === 0));
+
+            if (mustRefresh) {
+                const cacheCtx = this.vividCacheCtx;
+                const size = this.vividCacheCanvas.width;
+                const localR = size / 2;
+                const localCx = localR;
+                const localCy = localR;
+                const step = Math.max(2, Math.round(r * (this.searchInProgress ? 0.016 : 0.012)));
+
+                cacheCtx.clearRect(0, 0, size, size);
+                for (let gy = 0; gy <= size; gy += step) {
+                    for (let gx = 0; gx <= size; gx += step) {
+                        const nx = (gx - localCx) / localR;
+                        const ny = (gy - localCy) / localR;
+                        const rr = nx * nx + ny * ny;
+                        if (rr > 1) continue;
+                        const nz = Math.sqrt(Math.max(0, 1 - rr));
+                        const idx = this.nearestSeedIndex({ x: nx, y: ny, z: nz }, rotatedSeeds);
+                        const alpha = 0.26 + (1 - rr) * 0.28;
+                        cacheCtx.fillStyle = this.vividColorForSeed(idx, alpha);
+                        cacheCtx.fillRect(gx, gy, step, step);
+                    }
+                }
+
+                this.vividCacheRadius = r;
+                this.vividCacheRotX = this.rotX;
+                this.vividCacheRotY = this.rotY;
+                this.vividCachePointCount = this.points.length;
+                this.vividCacheDirty = false;
+            }
+
             ctx.save();
             ctx.beginPath();
             ctx.arc(cx, cy, r, 0, Math.PI * 2);
             ctx.clip();
-            for (let gy = y0; gy <= y1; gy += step) {
-                for (let gx = x0; gx <= x1; gx += step) {
-                    const nx = (gx - cx) / r;
-                    const ny = (gy - cy) / r;
-                    const rr = nx * nx + ny * ny;
-                    if (rr > 1) continue;
-                    const nz = Math.sqrt(Math.max(0, 1 - rr));
-                    const idx = this.nearestSeedIndex({ x: nx, y: ny, z: nz }, rotatedSeeds);
-                    const alpha = 0.26 + (1 - rr) * 0.28;
-                    ctx.fillStyle = this.vividColorForSeed(idx, alpha);
-                    ctx.fillRect(gx, gy, step, step);
-                }
-            }
+            ctx.drawImage(this.vividCacheCanvas, cx - r, cy - r, r * 2, r * 2);
             const shade = ctx.createRadialGradient(cx - r * 0.2, cy - r * 0.35, r * 0.18, cx, cy, r * 1.1);
             shade.addColorStop(0, 'rgba(255,255,255,0.12)');
             shade.addColorStop(0.45, 'rgba(255,255,255,0.02)');
@@ -1052,7 +1105,18 @@ const SphereMazeCase = {
                 const alpha = Math.max(0.1, (avgZ + 0.5));
                 ctx.globalAlpha = alpha;
 
-                if (isOpen) {
+                if (isVoronoi) {
+                    // Voronoi mode: emphasize cell-like network readability.
+                    if (isOpen) {
+                        ctx.strokeStyle = isRainbowVivid ? 'rgba(255, 255, 255, 0.55)' : 'rgba(255, 255, 255, 0.95)';
+                        ctx.lineWidth = 1.25;
+                        ctx.globalAlpha = Math.min(1, alpha * 0.95);
+                    } else {
+                        ctx.strokeStyle = isRainbowVivid ? 'rgba(130, 180, 255, 0.45)' : 'rgba(120, 170, 255, 0.72)';
+                        ctx.lineWidth = 0.95;
+                        ctx.globalAlpha = Math.max(0.14, alpha * 0.62);
+                    }
+                } else if (isOpen) {
                     // Unvisited Open Path - Subtle and thinner to reduce noise during rotation
                     ctx.strokeStyle = !isRainbowVivid ? 'rgba(255, 255, 255, 0.9)' : 'rgba(255, 255, 255, 0.3)';
                     ctx.lineWidth = 1.0;
@@ -1107,6 +1171,19 @@ const SphereMazeCase = {
 
         // 2. Draw Nodes (Front only)
         ctx.globalAlpha = 1.0;
+        if (isVoronoi) {
+            // Draw subtle seeds so Voronoi structure reads as a tessellated surface.
+            projected.forEach(p => {
+                if (p.z < -0.02) return;
+                const a = Math.max(0.18, Math.min(0.6, p.z + 0.35));
+                ctx.globalAlpha = a;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, r * 0.0045, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(220, 235, 255, 0.95)';
+                ctx.fill();
+            });
+            ctx.globalAlpha = 1.0;
+        }
         projected.forEach(p => {
             if (p.z < -0.1) return;
             
