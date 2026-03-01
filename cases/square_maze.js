@@ -630,15 +630,17 @@ const SquareMazeCase = {
         const algorithmLabel = algorithmNames[this.searchMode] || this.searchMode;
 
         ctx.save();
+        const margin = 26;
+        ctx.textAlign = 'right';
         ctx.fillStyle = '#FFFFFF';
         ctx.font = '600 13px Inter, system-ui, sans-serif';
-        ctx.fillText(`Algorithm: ${algorithmLabel}`, 26, 36);
+        ctx.fillText(`Algorithm: ${algorithmLabel}`, this.width - margin, 36);
 
         ctx.font = '500 12px Inter, system-ui, sans-serif';
         ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-        ctx.fillText(`Time: ${timeLabel}`, 26, 58);
-        ctx.fillText(`Cells Entered: ${enteredNow}`, 26, 78);
-        ctx.fillText(`Last: ${this.lastEnteredCellCount}`, 26, 98);
+        ctx.fillText(`Time: ${timeLabel}`, this.width - margin, 58);
+        ctx.fillText(`Cells Entered: ${enteredNow}`, this.width - margin, 78);
+        ctx.fillText(`Last: ${this.lastEnteredCellCount}`, this.width - margin, 98);
         ctx.restore();
     },
 
