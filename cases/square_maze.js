@@ -15,6 +15,7 @@ const SquareMazeCase = {
     searchDelayMs: 24,
     solutionSpeed: 70,
     colorTheme: 'ocean',
+    gridShape: 'square',
     sfxEnabled: true,
     sfxVolume: 0.1,
 
@@ -58,6 +59,20 @@ const SquareMazeCase = {
 
     get uiConfig() {
         return [
+            {
+                type: 'select',
+                id: 'sq_shape',
+                label: 'Grid Shape',
+                value: this.gridShape,
+                options: [
+                    { value: 'square', label: 'Square (NxN)' },
+                    { value: 'rectangle', label: 'Rectangle (Fill)' }
+                ],
+                onChange: (v) => {
+                    this.gridShape = v;
+                    this.reset();
+                }
+            },
             {
                 type: 'select',
                 id: 'sq_algorithm',
@@ -196,9 +211,14 @@ const SquareMazeCase = {
     },
 
     buildGrid() {
-        this.rows = Math.max(10, Math.floor(this.cols * (this.height / Math.max(1, this.width))));
-        this.rows = Math.min(42, this.rows);
-        this.cellSize = Math.min(this.width / this.cols, this.height / this.rows);
+        if (this.gridShape === 'rectangle') {
+            this.rows = Math.max(10, Math.floor(this.cols * (this.height / Math.max(1, this.width))));
+            this.rows = Math.min(80, this.rows);
+        } else {
+            this.rows = this.cols;
+        }
+
+        this.cellSize = Math.min(this.width / this.cols, this.height / this.rows) * 0.92;
         this.grid = Array.from({ length: this.rows }, () =>
             Array.from({ length: this.cols }, () => ({ open: 0 }))
         );
