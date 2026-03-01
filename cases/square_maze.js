@@ -597,6 +597,49 @@ const SquareMazeCase = {
             }
             ctx.stroke();
         }
+
+        this.drawScoreboard();
+    },
+
+    formatMs(ms) {
+        const value = Math.max(0, ms || 0);
+        const totalSec = value / 1000;
+        const min = Math.floor(totalSec / 60);
+        const sec = Math.floor(totalSec % 60);
+        const centi = Math.floor((value % 1000) / 10);
+        return `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}.${String(centi).padStart(2, '0')}`;
+    },
+
+    drawScoreboard() {
+        const ctx = this.ctx;
+        if (!ctx || !this.canvas) return;
+
+        const liveMs = this.searchInProgress && this.searchStartedAtMs > 0
+            ? performance.now() - this.searchStartedAtMs + this.searchElapsedMs
+            : this.searchElapsedMs;
+        const timeLabel = this.formatMs(liveMs);
+        const enteredNow = this.exploredSet.size;
+        
+        const algorithmNames = {
+            astar: 'A*',
+            dijkstra: 'Dijkstra',
+            greedy: 'Greedy',
+            bfs: 'BFS',
+            dfs: 'DFS'
+        };
+        const algorithmLabel = algorithmNames[this.searchMode] || this.searchMode;
+
+        ctx.save();
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = '600 13px Inter, system-ui, sans-serif';
+        ctx.fillText(`Algorithm: ${algorithmLabel}`, 26, 36);
+
+        ctx.font = '500 12px Inter, system-ui, sans-serif';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.fillText(`Time: ${timeLabel}`, 26, 58);
+        ctx.fillText(`Cells Entered: ${enteredNow}`, 26, 78);
+        ctx.fillText(`Last: ${this.lastEnteredCellCount}`, 26, 98);
+        ctx.restore();
     },
 
     startPausedOnLoad: true,
