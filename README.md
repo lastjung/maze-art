@@ -12,6 +12,7 @@ https://lastjung.github.io/maze-art/
 - **Polygon Maze**: 불규칙한 다각형 그리드 기반의 미로
 - **Square Maze**: 직교 격자 기반의 미로
 - **Sphere Maze**: 구면 그래프 기반의 미로
+- **Sphere Face Maze**: Goldberg 계열 다면체의 면 중심 그래프 기반 미로
 
 ## 추가 구현 계획 (Roadmap)
 

@@ -19,19 +19,20 @@
         <div class="tab-group" data-group="interactive" id="mobile-menu">
           <span class="group-label">Interactive</span>
           <div class="tab-row">
-            <div class="tab active" data-case="hex-maze">Hexagon Maze</div>
+            <div class="tab" data-case="hex-maze">Hexagon Maze</div>
             <div class="tab" data-case="fibonacci-maze">Fibonacci Maze</div>
             <div class="tab" data-case="circular">Circular Obstacles</div>
             <div class="tab" data-case="square-maze">Square Maze</div>
             <div class="tab" id="tab-poly" data-case="polygon-maze">Polygon Maze</div>
             <div class="tab" id="tab-sphere" data-case="sphere-maze">Sphere Maze</div>
+            <div class="tab active" id="tab-sphere-face" data-case="sphere-face-maze">Sphere Face Maze</div>
           </div>
         </div>
       </nav>
 
       <header id="header">
-        <h1 id="main-title">Hexagon Maze</h1>
-        <p class="subtitle" id="main-subtitle">Find the shortest path in a hex maze.</p>
+        <h1 id="main-title">Goldberg Face Maze</h1>
+        <p class="subtitle" id="main-subtitle">Pathfinding by traversing polyhedron faces on a sphere.</p>
       </header>
 
       <main class="dashboard-card">
@@ -65,6 +66,7 @@
     <script src="cases/square_maze.js"></script>
     <script src="cases/polygon_maze.js"></script>
     <script src="cases/sphere_maze.js"></script>
+    <script src="cases/sphere_face_maze.js"></script>
     <script>
       document.querySelectorAll('.tab').forEach(tab => {
         tab.addEventListener('click', () => {
@@ -96,13 +98,17 @@
             document.getElementById('main-title').textContent = 'Spherical Voronoi Maze';
             document.getElementById('main-subtitle').textContent = 'Maze solving on a rotating 3D-projected sphere.';
             Core.loadCase(SphereMazeCase, { mode: 'interactive' });
+          } else if (caseName === 'sphere-face-maze') {
+            document.getElementById('main-title').textContent = 'Goldberg Face Maze';
+            document.getElementById('main-subtitle').textContent = 'Pathfinding by traversing polyhedron faces on a sphere.';
+            Core.loadCase(SphereFaceMazeCase, { mode: 'interactive' });
           }
         });
       });
 
       window.onload = () => {
-        if (typeof HexMazeCase !== 'undefined') {
-          Core.loadCase(HexMazeCase, { mode: 'interactive' });
+        if (typeof SphereFaceMazeCase !== 'undefined') {
+          Core.loadCase(SphereFaceMazeCase, { mode: 'interactive' });
         }
       };
     </script>

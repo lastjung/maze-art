@@ -1,8 +1,8 @@
 /**
- * SphereMazeCase
- * A maze on a rotating sphere surface using Fibonacci distribution.
+ * SphereFaceMazeCase
+ * Face-following maze on a Goldberg-like spherical polyhedron.
  */
-const SphereMazeCase = {
+const SphereFaceMazeCase = {
     canvas: null,
     ctx: null,
     animationId: null,
@@ -12,7 +12,9 @@ const SphereMazeCase = {
     points: [],
     rotatedPoints: [],
     neighbors: [],
-    openEdges: new Set(),
+    faceCells: [],
+    faceCellEdgeNeighbors: [],
+    walls: new Set(),
     
     // Search State
     startNodeIdx: null,
@@ -72,6 +74,7 @@ const SphereMazeCase = {
     // Config
     config: {
         numPoints: 800,
+        topologyMode: 'goldberg',
         sphereScale: 100,
         theme: 'ocean',
         speed: 30,
@@ -81,8 +84,53 @@ const SphereMazeCase = {
         searchMode: 'astar',
         autoTrack: true
     },
-    sphereType: 'basic',
-
+    themes: {
+        rainbow: {
+            wall: '#FFFFFF',
+            explored: '#FFFFFF',
+            frontier: '#FFFFFF',
+            start: '#00FF00',
+            goal: '#FF0000',
+            path: 'rgba(0, 0, 0, 0.65)',
+            current: '#000000'
+        },
+        basic: {
+            wall: '#86efac',
+            explored: '#ec4899',
+            frontier: '#f472b6',
+            start: '#00CC00',
+            goal: '#FF0000',
+            path: 'rgba(255, 215, 0, 0.30)',
+            current: '#FFD700'
+        },
+        ocean: {
+            wall: '#22d3ee',
+            explored: '#3b82f6',
+            frontier: '#93c5fd',
+            start: '#0891b2',
+            goal: '#FF0000',
+            path: 'rgba(255, 0, 0, 0.45)',
+            current: '#FF0000'
+        },
+        sunset: {
+            wall: '#fdba74',
+            explored: '#7c3aed',
+            frontier: '#a78bfa',
+            start: '#f97316',
+            goal: '#FF0000',
+            path: 'rgba(255, 255, 255, 0.25)',
+            current: '#39ff14'
+        },
+        neon: {
+            wall: '#f3f4f6',
+            explored: '#4d7c0f',
+            frontier: '#84cc16',
+            start: '#1f2937',
+            goal: '#FF0000',
+            path: 'rgba(132, 204, 22, 0.2)',
+            current: '#FFD700'
+        }
+    },
     toggleTracking() {
         this.config.autoTrack = !this.config.autoTrack;
     },
@@ -248,24 +296,29 @@ const SphereMazeCase = {
     },
 
     get uiConfig() {
+        const isSoccer = this.config.topologyMode !== 'goldberg';
+        const freq = this.getGoldbergFrequency(this.config.numPoints);
+        const t = freq * freq;
+        const faces = 10 * t + 2;
         return [
             {
                 type: 'select',
-                id: 'sm_shape',
-                label: 'Sphere Type',
-                value: this.sphereType || 'basic',
+                id: 'sfm_topology',
+                label: 'Topology',
+                value: this.config.topologyMode,
                 options: [
-                    { value: 'basic', label: 'Classic Sphere' },
-                    { value: 'voronoi', label: 'Voronoi Sphere' },
-                    { value: 'fibonacci', label: 'Fibonacci Sphere' },
-                    { value: 'latlon', label: 'Lat-Lon Bands' },
-                    { value: 'cube', label: 'Cube Projection' },
-                    { value: 'soccer', label: 'Soccer Ball (Goldberg)' }
+                    { value: 'soccer', label: 'Soccer Ball GP(1,1)' },
+                    { value: 'goldberg', label: 'Goldberg GP(m,n)' }
                 ],
                 onChange: (v) => {
-                    this.sphereType = v;
+                    this.config.topologyMode = v;
                     this.reset();
                 }
+            },
+            {
+                type: 'info',
+                label: 'Topology Info',
+                value: isSoccer ? '12 Pentagons + 20 Hexagons (32 Faces)' : `Class-I Goldberg GP(${freq},0), T=${t}, Faces=${faces}`
             },
             {
                 type: 'select',
@@ -328,14 +381,17 @@ const SphereMazeCase = {
             },
             {
                 type: 'slider',
-                id: 'sm_radius',
+                id: 'sm_face_count',
                 label: 'Point Count',
                 min: 50,
                 max: 1000,
                 step: 50,
                 value: this.config.numPoints,
                 live: false,
-                onChange: (v) => { this.config.numPoints = v; this.reset(); }
+                onChange: (v) => {
+                    this.config.numPoints = v;
+                    if (this.config.topologyMode === 'goldberg') this.reset();
+                }
             },
             {
                 type: 'slider',
@@ -352,6 +408,9 @@ const SphereMazeCase = {
                 label: 'Effective Nodes',
                 value: `${this.points.length || this.getEffectivePointCount()}`
             },
+            { type: 'info', label: 'Walls', value: 'Dark Thick Boundaries' },
+            { type: 'info', label: 'Roads', value: 'Bright Thin Corridors' },
+            { type: 'info', label: 'Path Domain', value: 'Face-to-Face Traversal' },
             { type: 'info', label: 'Start (Green)', value: 'Automatically Set' },
             { type: 'info', label: 'Goal (Red)', value: 'Automatically Set' },
             { type: 'info', label: 'Manual Rotation', value: 'Drag to Spin Sphere' },
@@ -377,22 +436,188 @@ const SphereMazeCase = {
     },
 
     generateTopology() {
-        if (this.sphereType === 'soccer') {
-            const topology = this.generateSoccerFaceTopology(this.config.numPoints);
-            this.points = topology.points;
-            this.neighbors = topology.neighbors;
-            return;
+        const isGoldberg = this.config.topologyMode === 'goldberg';
+        const topology = isGoldberg
+            ? this.generateGoldbergTopology(this.getGoldbergFrequency(this.config.numPoints))
+            : this.generateSoccerBallTopology();
+        this.points = topology.points;
+        this.neighbors = topology.neighbors;
+        if (isGoldberg) {
+            // Preserve Goldberg dual-cell geometry from topology generation.
+            // We only derive ordered edge-neighbor indices for wall rendering.
+            const built = this.buildFaceCells(topology.points, topology.neighbors);
+            this.faceCells = topology.faceCells;
+            this.faceCellEdgeNeighbors = built.edgeNeighbors;
+        } else {
+            this.faceCells = topology.faceCells;
+            this.faceCellEdgeNeighbors = topology.faceCellEdgeNeighbors || [];
+        }
+    },
+
+    normalizePoint(v) {
+        const len = Math.hypot(v.x, v.y, v.z) || 1;
+        return { x: v.x / len, y: v.y / len, z: v.z / len };
+    },
+
+    buildFaceCells(points, neighbors) {
+        const cells = Array.from({ length: points.length }, () => []);
+        const edgeNeighbors = Array.from({ length: points.length }, () => []);
+        const cross = (a, b) => ({
+            x: a.y * b.z - a.z * b.y,
+            y: a.z * b.x - a.x * b.z,
+            z: a.x * b.y - a.y * b.x
+        });
+        const dot = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z;
+
+        for (let i = 0; i < points.length; i++) {
+            const p = points[i];
+            const ref = Math.abs(p.y) < 0.9 ? { x: 0, y: 1, z: 0 } : { x: 1, y: 0, z: 0 };
+            let u = this.normalizePoint(cross(ref, p));
+            let v = this.normalizePoint(cross(p, u));
+
+            const ring = [];
+            for (const nIdx of neighbors[i]) {
+                const q = points[nIdx];
+                const m = this.normalizePoint({ x: p.x + q.x, y: p.y + q.y, z: p.z + q.z });
+                ring.push({ point: m, angle: Math.atan2(dot(m, v), dot(m, u)), neighborIdx: nIdx });
+            }
+            ring.sort((a, b) => a.angle - b.angle);
+            cells[i] = ring.map((r) => r.point);
+            edgeNeighbors[i] = ring.map((r) => r.neighborIdx);
+        }
+        return { cells, edgeNeighbors };
+    },
+
+    generateSoccerBallTopology() {
+        const base = this.buildIcosahedron();
+        const vertices = base.vertices;
+        const faces = base.faces;
+        const edgeSet = new Set();
+        const vertexNeighbors = Array.from({ length: vertices.length }, () => new Set());
+
+        const addEdge = (a, b) => {
+            const key = a < b ? `${a}-${b}` : `${b}-${a}`;
+            edgeSet.add(key);
+            vertexNeighbors[a].add(b);
+            vertexNeighbors[b].add(a);
+        };
+
+        for (const [a, b, c] of faces) {
+            addEdge(a, b);
+            addEdge(b, c);
+            addEdge(c, a);
         }
 
-        const n = this.getEffectivePointCount();
-        let pts;
-        if (this.sphereType === 'latlon') pts = this.generateLatLonPoints(n);
-        else if (this.sphereType === 'cube') pts = this.generateCubeProjectionPoints(n);
-        else pts = this.generateFibonacciPoints(n);
-        this.points = pts;
+        const truncatedVertices = [];
+        const directedVertexIdx = new Map();
+        const getDirectedVertex = (from, to) => {
+            const key = `${from}->${to}`;
+            if (directedVertexIdx.has(key)) return directedVertexIdx.get(key);
+            const a = vertices[from];
+            const b = vertices[to];
+            // Truncation point near "from": true soccer-ball style corner cut.
+            const p = this.normalizePoint({
+                x: (2 * a.x + b.x) / 3,
+                y: (2 * a.y + b.y) / 3,
+                z: (2 * a.z + b.z) / 3
+            });
+            const idx = truncatedVertices.length;
+            truncatedVertices.push(p);
+            directedVertexIdx.set(key, idx);
+            return idx;
+        };
 
-        if (this.sphereType === 'voronoi') this.neighbors = this.buildSphericalVoronoiGraph(pts);
-        else this.neighbors = this.buildNearestNeighborGraph(pts, 6);
+        const faceIndexLists = [];
+
+        // 12 pentagons: one around each original icosahedron vertex.
+        for (let i = 0; i < vertices.length; i++) {
+            const ordered = this.orderNeighborsAroundVertex(i, vertices, Array.from(vertexNeighbors[i]));
+            const pent = ordered.map((n) => getDirectedVertex(i, n));
+            faceIndexLists.push(pent);
+        }
+
+        // 20 hexagons: one for each original icosahedron face.
+        for (const [a, b, c] of faces) {
+            faceIndexLists.push([
+                getDirectedVertex(a, b),
+                getDirectedVertex(b, a),
+                getDirectedVertex(b, c),
+                getDirectedVertex(c, b),
+                getDirectedVertex(c, a),
+                getDirectedVertex(a, c)
+            ]);
+        }
+
+        const points = faceIndexLists.map((poly) => {
+            let sx = 0;
+            let sy = 0;
+            let sz = 0;
+            for (const vi of poly) {
+                const p = truncatedVertices[vi];
+                sx += p.x;
+                sy += p.y;
+                sz += p.z;
+            }
+            return this.normalizePoint({ x: sx, y: sy, z: sz });
+        });
+
+        const edgeSets = Array.from({ length: faceIndexLists.length }, () => new Set());
+        const edgeToFace = new Map();
+        const faceCellEdgeNeighbors = faceIndexLists.map((poly) => new Array(poly.length).fill(null));
+        for (let fi = 0; fi < faceIndexLists.length; fi++) {
+            const poly = faceIndexLists[fi];
+            for (let i = 0; i < poly.length; i++) {
+                const u = poly[i];
+                const v = poly[(i + 1) % poly.length];
+                const key = u < v ? `${u}-${v}` : `${v}-${u}`;
+                if (edgeToFace.has(key)) {
+                    const otherRef = edgeToFace.get(key);
+                    const other = otherRef.faceIdx;
+                    edgeSets[fi].add(other);
+                    edgeSets[other].add(fi);
+                    faceCellEdgeNeighbors[fi][i] = other;
+                    faceCellEdgeNeighbors[other][otherRef.edgeIdx] = fi;
+                } else {
+                    edgeToFace.set(key, { faceIdx: fi, edgeIdx: i });
+                }
+            }
+        }
+
+        this.connectComponents(points, edgeSets);
+        const neighbors = edgeSets.map((s) => Array.from(s));
+        const faceCells = faceIndexLists.map((poly) => poly.map((vi) => truncatedVertices[vi]));
+        return { points, neighbors, faceCells, faceCellEdgeNeighbors };
+    },
+
+    orderNeighborsAroundVertex(vertexIdx, vertices, neighbors) {
+        const p = vertices[vertexIdx];
+        const ref = Math.abs(p.y) < 0.9 ? { x: 0, y: 1, z: 0 } : { x: 1, y: 0, z: 0 };
+        const cross = (a, b) => ({
+            x: a.y * b.z - a.z * b.y,
+            y: a.z * b.x - a.x * b.z,
+            z: a.x * b.y - a.y * b.x
+        });
+        const dot = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z;
+        let u = cross(ref, p);
+        u = this.normalizePoint(u);
+        let v = cross(p, u);
+        v = this.normalizePoint(v);
+
+        const around = neighbors.map((nIdx) => {
+            const q = vertices[nIdx];
+            const radial = dot(q, p);
+            const t = this.normalizePoint({
+                x: q.x - p.x * radial,
+                y: q.y - p.y * radial,
+                z: q.z - p.z * radial
+            });
+            return {
+                idx: nIdx,
+                angle: Math.atan2(dot(t, v), dot(t, u))
+            };
+        });
+        around.sort((a, b) => a.angle - b.angle);
+        return around.map((n) => n.idx);
     },
 
     buildNearestNeighborGraph(pts, neighborCount = 6) {
@@ -540,23 +765,19 @@ const SphereMazeCase = {
     },
 
     getEffectivePointCount() {
-        const raw = Math.max(50, Math.floor(this.config.numPoints));
-        if (this.sphereType === 'soccer') {
-            const freq = this.getSoccerFrequency(raw);
-            return 20 * freq * freq;
-        }
-        if (this.sphereType !== 'basic') return raw;
-        // Basic mode intentionally keeps a coarser graph for a cleaner default look.
-        return Math.max(80, Math.floor(raw * 0.62));
+        if (this.config.topologyMode === 'soccer') return 32;
+        const freq = this.getGoldbergFrequency(this.config.numPoints);
+        const t = freq * freq;
+        return 10 * t + 2;
     },
 
-    getSoccerFrequency(targetCount) {
-        const target = Math.max(20, Math.floor(targetCount || 20));
+    getGoldbergFrequency(targetCount) {
+        const target = Math.max(12, Math.floor(targetCount || 12));
         const frequencies = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
         let bestFreq = 1;
         let bestDiff = Infinity;
         for (const freq of frequencies) {
-            const faceCount = 20 * freq * freq;
+            const faceCount = 10 * freq * freq + 2;
             const diff = Math.abs(faceCount - target);
             if (diff < bestDiff) {
                 bestDiff = diff;
@@ -566,128 +787,74 @@ const SphereMazeCase = {
         return bestFreq;
     },
 
-    generateFibonacciPoints(n) {
-        const pts = [];
-        const ga = Math.PI * (3 - Math.sqrt(5));
-        for (let i = 0; i < n; i++) {
-            const y = 1 - (i / Math.max(1, n - 1)) * 2;
-            const r = Math.sqrt(Math.max(0, 1 - y * y));
-            const theta = ga * i;
-            pts.push({
-                x: Math.cos(theta) * r,
-                y,
-                z: Math.sin(theta) * r
-            });
-        }
-        return pts;
-    },
-
-    generateLatLonPoints(n) {
-        const pts = [];
-        const bands = Math.max(10, Math.round(Math.sqrt(n) * 1.4));
-        for (let b = 0; b < bands; b++) {
-            const v = (b + 0.5) / bands;
-            const y = 1 - 2 * v;
-            const r = Math.sqrt(Math.max(0, 1 - y * y));
-            const around = Math.max(4, Math.round(2 * Math.PI * r * bands * 0.45));
-            const phase = (b % 2) * (Math.PI / around);
-            for (let j = 0; j < around; j++) {
-                const theta = (j / around) * Math.PI * 2 + phase;
-                pts.push({
-                    x: Math.cos(theta) * r,
-                    y,
-                    z: Math.sin(theta) * r
-                });
-            }
-        }
-        if (pts.length > n) return pts.slice(0, n);
-        while (pts.length < n) {
-            const t = pts.length / Math.max(1, n - 1);
-            const y = 1 - 2 * t;
-            const r = Math.sqrt(Math.max(0, 1 - y * y));
-            const theta = t * Math.PI * 12;
-            pts.push({ x: Math.cos(theta) * r, y, z: Math.sin(theta) * r });
-        }
-        return pts;
-    },
-
-    generateCubeProjectionPoints(n) {
-        const pts = [];
-        const perFace = Math.max(2, Math.ceil(n / 6));
-        const side = Math.max(2, Math.ceil(Math.sqrt(perFace)));
-        const faces = [
-            { axis: 'x', sign: 1 }, { axis: 'x', sign: -1 },
-            { axis: 'y', sign: 1 }, { axis: 'y', sign: -1 },
-            { axis: 'z', sign: 1 }, { axis: 'z', sign: -1 }
-        ];
-
-        for (const face of faces) {
-            for (let iy = 0; iy < side; iy++) {
-                for (let ix = 0; ix < side; ix++) {
-                    const u = (ix + 0.5) / side * 2 - 1;
-                    const v = (iy + 0.5) / side * 2 - 1;
-                    let x = 0;
-                    let y = 0;
-                    let z = 0;
-                    if (face.axis === 'x') { x = face.sign; y = u; z = v; }
-                    else if (face.axis === 'y') { y = face.sign; x = u; z = v; }
-                    else { z = face.sign; x = u; y = v; }
-
-                    const len = Math.hypot(x, y, z) || 1;
-                    pts.push({ x: x / len, y: y / len, z: z / len });
-                }
-            }
-        }
-
-        if (pts.length > n) return pts.slice(0, n);
-        while (pts.length < n) {
-            const t = pts.length / Math.max(1, n - 1);
-            const y = 1 - 2 * t;
-            const r = Math.sqrt(Math.max(0, 1 - y * y));
-            const theta = t * Math.PI * 10;
-            pts.push({ x: Math.cos(theta) * r, y, z: Math.sin(theta) * r });
-        }
-        return pts;
-    },
-
-    generateSoccerFaceTopology(targetCount) {
-        const freq = this.getSoccerFrequency(targetCount);
+    generateGoldbergTopology(frequency) {
         const base = this.buildIcosahedron();
-        const subdivision = this.buildIcosphereByFrequency(base.vertices, base.faces, freq);
-        const vertices = subdivision.vertices;
-        const faces = subdivision.faces;
+        const geo = this.buildIcosphereByFrequency(base.vertices, base.faces, frequency);
+        const points = geo.vertices.map((v) => ({ x: v.x, y: v.y, z: v.z }));
+        const triangles = geo.faces;
 
-        const points = faces.map((face) => {
-            const a = vertices[face[0]];
-            const b = vertices[face[1]];
-            const c = vertices[face[2]];
-            const cx = (a.x + b.x + c.x) / 3;
-            const cy = (a.y + b.y + c.y) / 3;
-            const cz = (a.z + b.z + c.z) / 3;
-            const len = Math.hypot(cx, cy, cz) || 1;
-            return { x: cx / len, y: cy / len, z: cz / len };
-        });
+        const edgeSets = Array.from({ length: points.length }, () => new Set());
+        const incidentTriangles = Array.from({ length: points.length }, () => []);
 
-        const edgeSets = Array.from({ length: faces.length }, () => new Set());
-        const edgeToFace = new Map();
-        const addNeighbor = (f1, f2) => {
-            if (f1 === f2 || f1 < 0 || f2 < 0) return;
-            edgeSets[f1].add(f2);
-            edgeSets[f2].add(f1);
+        const addEdge = (a, b) => {
+            if (a === b) return;
+            edgeSets[a].add(b);
+            edgeSets[b].add(a);
         };
 
-        for (let fi = 0; fi < faces.length; fi++) {
-            const [a, b, c] = faces[fi];
-            const edges = [[a, b], [b, c], [c, a]];
-            for (const [u, v] of edges) {
-                const key = u < v ? `${u}-${v}` : `${v}-${u}`;
-                if (edgeToFace.has(key)) addNeighbor(fi, edgeToFace.get(key));
-                else edgeToFace.set(key, fi);
-            }
+        const triCentroids = triangles.map(([a, b, c]) => {
+            const pa = points[a];
+            const pb = points[b];
+            const pc = points[c];
+            return this.normalizePoint({
+                x: (pa.x + pb.x + pc.x) / 3,
+                y: (pa.y + pb.y + pc.y) / 3,
+                z: (pa.z + pb.z + pc.z) / 3
+            });
+        });
+
+        for (let ti = 0; ti < triangles.length; ti++) {
+            const [a, b, c] = triangles[ti];
+            addEdge(a, b);
+            addEdge(b, c);
+            addEdge(c, a);
+            incidentTriangles[a].push(ti);
+            incidentTriangles[b].push(ti);
+            incidentTriangles[c].push(ti);
+        }
+
+        const faceCells = Array.from({ length: points.length }, () => []);
+        const cross = (a, b) => ({
+            x: a.y * b.z - a.z * b.y,
+            y: a.z * b.x - a.x * b.z,
+            z: a.x * b.y - a.y * b.x
+        });
+        const dot = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z;
+
+        for (let i = 0; i < points.length; i++) {
+            const p = points[i];
+            const ref = Math.abs(p.y) < 0.9 ? { x: 0, y: 1, z: 0 } : { x: 1, y: 0, z: 0 };
+            const u = this.normalizePoint(cross(ref, p));
+            const v = this.normalizePoint(cross(p, u));
+            const ring = incidentTriangles[i].map((ti) => {
+                const c = triCentroids[ti];
+                const radial = dot(c, p);
+                const t = this.normalizePoint({
+                    x: c.x - p.x * radial,
+                    y: c.y - p.y * radial,
+                    z: c.z - p.z * radial
+                });
+                return {
+                    point: c,
+                    angle: Math.atan2(dot(t, v), dot(t, u))
+                };
+            });
+            ring.sort((a, b) => a.angle - b.angle);
+            faceCells[i] = ring.map((r) => r.point);
         }
 
         this.connectComponents(points, edgeSets);
-        return { points, neighbors: edgeSets.map((s) => Array.from(s)) };
+        return { points, neighbors: edgeSets.map((s) => Array.from(s)), faceCells };
     },
 
     buildIcosphereByFrequency(baseVertices, baseFaces, frequency) {
@@ -704,14 +871,11 @@ const SphereMazeCase = {
         const faces = [];
 
         const addVertex = (x, y, z) => {
-            const len = Math.hypot(x, y, z) || 1;
-            const nx = x / len;
-            const ny = y / len;
-            const nz = z / len;
-            const key = `${Math.round(nx * 1e6)}_${Math.round(ny * 1e6)}_${Math.round(nz * 1e6)}`;
+            const n = this.normalizePoint({ x, y, z });
+            const key = `${Math.round(n.x * 1e6)}_${Math.round(n.y * 1e6)}_${Math.round(n.z * 1e6)}`;
             if (vertexMap.has(key)) return vertexMap.get(key);
             const idx = vertices.length;
-            vertices.push({ x: nx, y: ny, z: nz });
+            vertices.push(n);
             vertexMap.set(key, idx);
             return idx;
         };
@@ -833,25 +997,60 @@ const SphereMazeCase = {
     },
 
     generateMaze() {
-        this.openEdges = new Set();
-        const visited = new Set();
-        const stack = [0];
-        visited.add(0);
+        this.walls = new Set();
+        this.faceColors = new Map(); // Restore visual colors
+        const numFaces = this.points.length;
+        for (let i = 0; i < numFaces; i++) this.walls.add(i);
+
+        // Visual: Color 50% of cells randomly (복구)
+        const indices = Array.from({ length: numFaces }, (_, i) => i);
+        for (let i = indices.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [indices[i], indices[j]] = [indices[j], indices[i]];
+        }
+        for (let i = 0; i < Math.floor(numFaces * 0.5); i++) {
+            this.faceColors.set(indices[i], this.vividColorForSeed(indices[i]));
+        }
+
+
+
+        // 1. Distance-2 Neighbors Map
+        const d2Map = new Array(numFaces).fill(0).map(() => []);
+        for (let i = 0; i < numFaces; i++) {
+            for (const n1 of this.neighbors[i]) {
+                for (const n2 of this.neighbors[n1]) {
+                    if (n2 !== i && !this.neighbors[i].includes(n2)) {
+                        d2Map[i].push({ next: n2, bridge: n1 });
+                    }
+                }
+            }
+        }
+
+        // 2. Randomized DFS on Faces (D2 Jumps)
+        const visitedNodes = new Set();
+        const start = 0;
+        const stack = [start];
+        visitedNodes.add(start);
+        this.walls.delete(start);
 
         while (stack.length > 0) {
             const current = stack[stack.length - 1];
-            const unvisitedNeighbors = this.neighbors[current].filter(n => !visited.has(n));
+            const options = d2Map[current].filter(opt => !visitedNodes.has(opt.next));
 
-            if (unvisitedNeighbors.length > 0) {
-                const next = unvisitedNeighbors[Math.floor(Math.random() * unvisitedNeighbors.length)];
-                visited.add(next);
-                const edgeKey = current < next ? `${current}-${next}` : `${next}-${current}`;
-                this.openEdges.add(edgeKey);
-                stack.push(next);
+            if (options.length > 0) {
+                const o = options[Math.floor(Math.random() * options.length)];
+                this.walls.delete(o.bridge);
+                this.walls.delete(o.next);
+                visitedNodes.add(o.next);
+                stack.push(o.next);
             } else {
                 stack.pop();
             }
         }
+        
+        // Final punch: ensure entry and exit are NOT walls
+        if (this.startNodeIdx !== null) this.walls.delete(this.startNodeIdx);
+        if (this.goalNodeIdx !== null) this.walls.delete(this.goalNodeIdx);
     },
 
     clearSearchState() {
@@ -987,8 +1186,7 @@ const SphereMazeCase = {
         MazeEngine.playTone(freq, 0.05, 'sine', 0.1, 0.003, this.config);
 
         const neighbors = this.neighbors[current].filter(n => {
-            const edgeKey = current < n ? `${current}-${n}` : `${n}-${current}`;
-            return this.openEdges.has(edgeKey);
+            return !this.walls.has(n);
         });
 
         for (const next of neighbors) {
@@ -1151,12 +1349,8 @@ const SphereMazeCase = {
         const cy = height / 2;
         const scale = Math.max(0.6, Math.min(1.4, (this.config.sphereScale || 100) / 100));
         const r = Math.min(width, height) * 0.4 * scale;
-        const isVoronoi = this.sphereType === 'voronoi';
+        const renderTheme = this.themes[this.config.theme] || this.themes.basic;
         const isRainbowVivid = this.config.theme === 'rainbow-vivid';
-        const theme = isRainbowVivid
-            ? (MazeEngine.themes.ocean || MazeEngine.themes.rainbow)
-            : (MazeEngine.themes[this.config.theme] || MazeEngine.themes.ocean);
-        const renderTheme = theme;
 
         ctx.clearRect(0, 0, width, height);
         ctx.fillStyle = '#1e1e1e';
@@ -1176,242 +1370,128 @@ const SphereMazeCase = {
 
         const visiblePath = new Set(this.path.slice(0, this.pathProgress));
         const frontierSet = new Set(this.frontier);
-        const rotatedSeeds = projected.map(p => p.rot);
 
-        if (isRainbowVivid) {
-            const cacheSize = Math.max(24, Math.ceil(r * 2));
-            if (!this.vividCacheCanvas) {
-                this.vividCacheCanvas = document.createElement('canvas');
-                this.vividCacheCtx = this.vividCacheCanvas.getContext('2d');
-                this.vividCacheDirty = true;
-            }
-            if (this.vividCacheCanvas.width !== cacheSize || this.vividCacheCanvas.height !== cacheSize) {
-                this.vividCacheCanvas.width = cacheSize;
-                this.vividCacheCanvas.height = cacheSize;
-                this.vividCacheDirty = true;
-            }
 
-            this.vividCacheTick += 1;
-            const rotDelta = Math.abs(this.rotX - this.vividCacheRotX) + Math.abs(this.rotY - this.vividCacheRotY);
-            const isRotating = rotDelta > 0.0015;
-            const stride = this.searchInProgress ? 3 : 2;
-            const mustRefresh =
-                this.vividCacheDirty ||
-                this.vividCachePointCount !== this.points.length ||
-                rotDelta > 0.02 ||
-                (isRotating && (this.vividCacheTick % stride === 0));
+        // Draw sphere body.
+        const grad = ctx.createRadialGradient(
+            cx - r * 0.22,
+            cy - r * 0.28,
+            r * 0.08,
+            cx,
+            cy,
+            r
+        );
+        // Body: Completely transparent (as requested)
+        grad.addColorStop(0, 'rgba(0, 0, 0, 0)');
+        grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.fill();
 
-            if (mustRefresh) {
-                const cacheCtx = this.vividCacheCtx;
-                const size = this.vividCacheCanvas.width;
-                const localR = size / 2;
-                const localCx = localR;
-                const localCy = localR;
-                const step = Math.max(2, Math.round(r * (this.searchInProgress ? 0.016 : 0.012)));
+        // Build projected face-cell polygons.
+        const projectedCells = this.faceCells.map((cell, idx) => {
+            const verts = cell.map((v) => {
+                const rot = this.rotatePoint(v, this.rotX, this.rotY);
+                return {
+                    x: cx + rot.x * r,
+                    y: cy + rot.y * r,
+                    z: rot.z
+                };
+            });
+            const avgZ = verts.length > 0
+                ? verts.reduce((sum, p) => sum + p.z, 0) / verts.length
+                : -1;
+            return { idx, verts, avgZ };
+        })
+            .filter((cell) => cell.verts.length >= 3 && cell.avgZ > -0.55)
+            .sort((a, b) => a.avgZ - b.avgZ);
 
-                cacheCtx.clearRect(0, 0, size, size);
-                for (let gy = 0; gy <= size; gy += step) {
-                    for (let gx = 0; gx <= size; gx += step) {
-                        const nx = (gx - localCx) / localR;
-                        const ny = (gy - localCy) / localR;
-                        const rr = nx * nx + ny * ny;
-                        if (rr > 1) continue;
-                        const nz = Math.sqrt(Math.max(0, 1 - rr));
-                        const idx = this.nearestSeedIndex({ x: nx, y: ny, z: nz }, rotatedSeeds);
-                        const alpha = 0.26 + (1 - rr) * 0.28;
-                        cacheCtx.fillStyle = this.vividColorForSeed(idx, alpha);
-                        cacheCtx.fillRect(gx, gy, step, step);
-                    }
-                }
+        // Face-domain rendering: each traversable state fills a face-cell.
+        for (const cell of projectedCells) {
+            const center = projected[cell.idx];
+            const depthAlpha = Math.max(0.12, Math.min(0.95, cell.avgZ + 0.72));
 
-                this.vividCacheRadius = r;
-                this.vividCacheRotX = this.rotX;
-                this.vividCacheRotY = this.rotY;
-                this.vividCachePointCount = this.points.length;
-                this.vividCacheDirty = false;
-            }
-
-            ctx.save();
-            ctx.beginPath();
-            ctx.arc(cx, cy, r, 0, Math.PI * 2);
-            ctx.clip();
-            ctx.drawImage(this.vividCacheCanvas, cx - r, cy - r, r * 2, r * 2);
-            const shade = ctx.createRadialGradient(cx - r * 0.2, cy - r * 0.35, r * 0.18, cx, cy, r * 1.1);
-            shade.addColorStop(0, 'rgba(255,255,255,0.12)');
-            shade.addColorStop(0.45, 'rgba(255,255,255,0.02)');
-            shade.addColorStop(1, 'rgba(0,0,0,0.16)');
-            ctx.fillStyle = shade;
-            ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
-            ctx.restore();
-        } else {
-            // Draw Sphere body with stronger contrast against dark background.
-            const grad = ctx.createRadialGradient(
-                cx - r * 0.22,
-                cy - r * 0.28,
-                r * 0.08,
-                cx,
-                cy,
-                r
-            );
-            if (this.config.theme === 'rainbow') {
-                grad.addColorStop(0, 'rgba(255, 255, 255, 0.85)');
-                grad.addColorStop(0.55, 'rgba(180, 180, 180, 0.8)');
-                grad.addColorStop(1, 'rgba(60, 60, 60, 0.8)');
-            } else if (this.config.theme === 'basic') {
-                grad.addColorStop(0, 'rgba(120, 255, 150, 0.85)'); // Bright minty center
-                grad.addColorStop(0.55, 'rgba(40, 200, 80, 0.8)');   // Vibrant middle green
-                grad.addColorStop(1, 'rgba(10, 100, 30, 0.8)');      // Clean dark green edge
-            } else if (this.config.theme === 'ocean') {
-                grad.addColorStop(0, 'rgba(80, 200, 230, 0.85)');    // Bright soft cyan top
-                grad.addColorStop(0.55, 'rgba(40, 150, 180, 0.8)');  // Medium teal
-                grad.addColorStop(1, 'rgba(10, 80, 110, 0.8)');      // Distinct dark cyan edge
-            } else if (this.config.theme === 'sunset') {
-                grad.addColorStop(0, 'rgba(255, 200, 150, 0.85)');
-                grad.addColorStop(0.55, 'rgba(255, 120, 60, 0.8)');
-                grad.addColorStop(1, 'rgba(120, 20, 80, 0.8)');
-            } else if (this.config.theme === 'neon') {
-                grad.addColorStop(0, 'rgba(160, 160, 160, 0.85)');
-                grad.addColorStop(0.55, 'rgba(80, 80, 80, 0.8)');
-                grad.addColorStop(1, 'rgba(20, 20, 20, 0.8)');
+            let fillStyle = null;
+            let alpha = depthAlpha;
+            if (visiblePath.has(cell.idx)) {
+                fillStyle = renderTheme.path;
+                alpha = Math.min(1, depthAlpha * 1.0);
+            } else if (cell.idx === this.currentIdx) {
+                fillStyle = renderTheme.current;
+                alpha = Math.min(1, depthAlpha * 1.0);
+            } else if (this.explored.has(cell.idx)) {
+                fillStyle = renderTheme.explored;
+                alpha = Math.min(0.92, depthAlpha * 0.88);
+            } else if (frontierSet.has(cell.idx)) {
+                fillStyle = renderTheme.frontier;
+                alpha = Math.min(0.9, depthAlpha * 0.82);
+            } else if (this.faceColors && this.faceColors.has(cell.idx)) {
+                // FIXED: Restore the 50% random colors the user saw
+                fillStyle = this.faceColors.get(cell.idx);
+                alpha = 0.9;
+            } else if (this.walls.has(cell.idx)) {
+                fillStyle = renderTheme.wall;
+                alpha = 1.0; 
             } else {
-                grad.addColorStop(0, 'rgba(200, 200, 200, 0.85)');
-                grad.addColorStop(0.55, 'rgba(100, 100, 100, 0.8)');
-                grad.addColorStop(1, 'rgba(40, 40, 40, 0.8)');
+                fillStyle = 'rgba(0, 0, 0, 0)'; 
+                alpha = 0;
             }
-            ctx.fillStyle = grad;
+
+            ctx.globalAlpha = alpha;
             ctx.beginPath();
-            ctx.arc(cx, cy, r, 0, Math.PI * 2);
+            ctx.moveTo(cell.verts[0].x, cell.verts[0].y);
+            for (let i = 1; i < cell.verts.length; i++) {
+                ctx.lineTo(cell.verts[i].x, cell.verts[i].y);
+            }
+            ctx.closePath();
+            ctx.fillStyle = fillStyle;
             ctx.fill();
-        }
 
-        // 1. Draw Edges (Layered)
-        ctx.lineCap = 'round';
-        
-        // Layer 1: All Edges (Walls and Unvisited Open Paths)
-        for (let i = 0; i < this.points.length; i++) {
-            const p1 = projected[i];
-            this.neighbors[i].forEach(nIdx => {
-                if (i > nIdx) return;
-                const edgeKey = i < nIdx ? `${i}-${nIdx}` : `${nIdx}-${i}`;
-                const isOpen = this.openEdges.has(edgeKey);
-                const p2 = projected[nIdx];
-                const avgZ = (p1.z + p2.z) / 2;
-                if (avgZ < -0.4) return; // Occlusion
+            ctx.globalAlpha = Math.max(0.2, depthAlpha * 0.34);
+            ctx.strokeStyle = 'rgba(26, 28, 34, 0.85)';
+            ctx.lineWidth = 0.7;
+            ctx.stroke();
 
+            // Preserve clear start/goal anchors.
+            if ((cell.idx === this.startNodeIdx || cell.idx === this.goalNodeIdx) && center && center.z > -0.3) {
+                ctx.globalAlpha = 1;
                 ctx.beginPath();
-                const alpha = Math.max(0.1, (avgZ + 0.5));
-                ctx.globalAlpha = alpha;
-
-                if (isVoronoi) {
-                    // Voronoi mode: emphasize cell-like network readability.
-                    if (isOpen) {
-                        ctx.strokeStyle = isRainbowVivid ? 'rgba(255, 255, 255, 0.55)' : 'rgba(255, 255, 255, 0.95)';
-                        ctx.lineWidth = 1.25;
-                        ctx.globalAlpha = Math.min(1, alpha * 0.95);
-                    } else {
-                        ctx.strokeStyle = isRainbowVivid ? 'rgba(130, 180, 255, 0.45)' : 'rgba(120, 170, 255, 0.72)';
-                        ctx.lineWidth = 0.95;
-                        ctx.globalAlpha = Math.max(0.14, alpha * 0.62);
-                    }
-                } else if (isOpen) {
-                    // Unvisited Open Path - Subtle and thinner to reduce noise during rotation
-                    ctx.strokeStyle = !isRainbowVivid ? 'rgba(255, 255, 255, 0.9)' : 'rgba(255, 255, 255, 0.3)';
-                    ctx.lineWidth = 1.0;
-                } else {
-                    // Wall
-                    ctx.strokeStyle = !isRainbowVivid ? 'rgba(255, 255, 255, 0.5)' : renderTheme.wall;
-                    ctx.lineWidth = 0.8;
-                    ctx.globalAlpha = !isRainbowVivid ? alpha * 0.4 : alpha * 0.2; // Walls are very subtle
-                }
-
-                ctx.moveTo(p1.x, p1.y);
-                ctx.lineTo(p2.x, p2.y);
+                ctx.arc(center.x, center.y, 4.2, 0, Math.PI * 2);
+                ctx.fillStyle = cell.idx === this.startNodeIdx ? renderTheme.start : renderTheme.goal;
+                ctx.fill();
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 1.4;
                 ctx.stroke();
-            });
-        }
-        
-        // Layer 2: Search Tree (Explored Edges from parentMap)
-        ctx.globalAlpha = 1.0;
-        this.parentMap.forEach((parentIdx, childIdx) => {
-            if (parentIdx === null) return;
-            const p1 = projected[childIdx];
-            const p2 = projected[parentIdx];
-            const avgZ = (p1.z + p2.z) / 2;
-            if (avgZ < -0.2) return; // Occlusion
-
-            ctx.beginPath();
-            ctx.strokeStyle = renderTheme.explored;
-            ctx.lineWidth = 1.5;
-            // Depth-based opacity for search tree
-            ctx.globalAlpha = Math.min(1.0, avgZ + 0.8);
-            ctx.moveTo(p1.x, p1.y);
-            ctx.lineTo(p2.x, p2.y);
-            ctx.stroke();
-        });
-
-        // Layer 3: Final Path (if found)
-        if (this.path.length > 1 && this.pathProgress > 0) {
-            ctx.globalAlpha = 1.0;
-            ctx.beginPath();
-            ctx.strokeStyle = renderTheme.current;
-            ctx.lineWidth = 2.5;
-            let move = true;
-            for (let i = 0; i < this.pathProgress; i++) {
-                const idx = this.path[i];
-                const p = projected[idx];
-                if (p.z < -0.2) { move = true; continue; }
-                if (move) { ctx.moveTo(p.x, p.y); move = false; }
-                else ctx.lineTo(p.x, p.y);
             }
-            ctx.stroke();
         }
-
-        // 2. Draw Nodes (Front only)
         ctx.globalAlpha = 1.0;
-        if (isVoronoi) {
-            // Draw subtle seeds so Voronoi structure reads as a tessellated surface.
-            projected.forEach(p => {
-                if (p.z < -0.02) return;
-                const a = Math.max(0.18, Math.min(0.6, p.z + 0.35));
-                ctx.globalAlpha = a;
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, r * 0.0045, 0, Math.PI * 2);
-                ctx.fillStyle = 'rgba(220, 235, 255, 0.95)';
-                ctx.fill();
-            });
-            ctx.globalAlpha = 1.0;
-        }
-        projected.forEach(p => {
-            if (p.z < -0.1) return;
-            
-            let fill = null;
-            const pathIdx = this.path.indexOf(p.idx);
-            if (pathIdx !== -1 && pathIdx < this.pathProgress) fill = renderTheme.path;
-            else if (p.idx === this.currentIdx) fill = renderTheme.current;
-            else if (this.explored.has(p.idx)) fill = renderTheme.explored;
-            else if (frontierSet.has(p.idx)) fill = renderTheme.frontier;
 
-            if (fill) {
+        // Face boundaries: Consistent subtle lines (Hex style)
+        for (const cell of projectedCells) {
+            const edgeNeighbors = this.faceCellEdgeNeighbors[cell.idx] || [];
+            const verts = cell.verts;
+            if (verts.length < 2) continue;
+            for (let e = 0; e < verts.length; e++) {
+                const nIdx = edgeNeighbors[e];
+                if (typeof nIdx !== 'number') continue;
+                if (cell.idx >= nIdx) continue;
+
+                const a = verts[e];
+                const b = verts[(e + 1) % verts.length];
+                const avgZ = (a.z + b.z) * 0.5;
+                if (avgZ < -0.4) continue;
+
+                ctx.globalAlpha = Math.max(0.15, Math.min(0.65, avgZ + 0.5));
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+                ctx.lineWidth = 0.5;
                 ctx.beginPath();
-                ctx.arc(p.x, p.y, r * 0.012, 0, Math.PI * 2);
-                ctx.fillStyle = fill;
-                ctx.fill();
+                ctx.moveTo(a.x, a.y);
+                ctx.lineTo(b.x, b.y);
+                ctx.stroke();
             }
-        });
-
-        // Draw Start/Goal Indicators
-        [this.startNodeIdx, this.goalNodeIdx].forEach(idx => {
-            const p = projected[idx];
-            if (p.z < -0.1) return;
-            
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
-            ctx.fillStyle = idx === this.startNodeIdx ? renderTheme.start : renderTheme.goal;
-            ctx.fill();
-            ctx.strokeStyle = '#fff';
-            ctx.lineWidth = 2;
-            ctx.stroke();
-        });
+        }
+        ctx.globalAlpha = 1.0;
 
         this.drawScoreboard();
     },
@@ -1471,4 +1551,4 @@ const SphereMazeCase = {
     }
 };
 
-window.SphereMazeCase = SphereMazeCase;
+window.SphereFaceMazeCase = SphereFaceMazeCase;
