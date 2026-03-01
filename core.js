@@ -7,7 +7,7 @@ const Core = {
     currentCase: null,
     isIdle: false,
     idleTimer: null,
-    IDLE_TIMEOUT: 60 * 1000,
+    IDLE_TIMEOUT: 3 * 60 * 1000,
     isRecordingMode: false,
     isRunning: true,
     currentCaseMode: 'display',

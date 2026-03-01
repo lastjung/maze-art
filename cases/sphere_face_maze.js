@@ -74,7 +74,7 @@ const SphereFaceMazeCase = {
     // Config
     config: {
         numPoints: 800,
-        topologyMode: 'goldberg',
+        topologyMode: 'fibonacci',
         sphereScale: 100,
         theme: 'ocean',
         speed: 30,
@@ -296,7 +296,7 @@ const SphereFaceMazeCase = {
     },
 
     get uiConfig() {
-        const isSoccer = this.config.topologyMode !== 'goldberg';
+        const isGoldberg = this.config.topologyMode === 'goldberg';
         const freq = this.getGoldbergFrequency(this.config.numPoints);
         const t = freq * freq;
         const faces = 10 * t + 2;
@@ -307,7 +307,7 @@ const SphereFaceMazeCase = {
                 label: 'Topology',
                 value: this.config.topologyMode,
                 options: [
-                    { value: 'soccer', label: 'Soccer Ball GP(1,1)' },
+                    { value: 'fibonacci', label: 'Fibonacci + kNN(6)' },
                     { value: 'goldberg', label: 'Goldberg GP(m,n)' }
                 ],
                 onChange: (v) => {
@@ -318,7 +318,9 @@ const SphereFaceMazeCase = {
             {
                 type: 'info',
                 label: 'Topology Info',
-                value: isSoccer ? '12 Pentagons + 20 Hexagons (32 Faces)' : `Class-I Goldberg GP(${freq},0), T=${t}, Faces=${faces}`
+                value: isGoldberg
+                    ? `Class-I Goldberg GP(${freq},0), T=${t}, Faces=${faces}`
+                    : `Fibonacci points + nearest-neighbor graph, Nodes=${Math.max(12, Math.floor(this.config.numPoints || 12))}`
             },
             {
                 type: 'select',
@@ -390,7 +392,7 @@ const SphereFaceMazeCase = {
                 live: false,
                 onChange: (v) => {
                     this.config.numPoints = v;
-                    if (this.config.topologyMode === 'goldberg') this.reset();
+                    this.reset();
                 }
             },
             {
@@ -431,27 +433,36 @@ const SphereFaceMazeCase = {
         this.generateTopology();
         this.generateMaze();
         this.pickPolarEndpoints();
+        if (this.startNodeIdx !== null) this.walls.delete(this.startNodeIdx);
+        if (this.goalNodeIdx !== null) this.walls.delete(this.goalNodeIdx);
+        this.ensureEndpointsConnected();
         
         this.draw();
     },
 
     generateTopology() {
-        const isGoldberg = this.config.topologyMode === 'goldberg';
-        const topology = isGoldberg
-            ? this.generateGoldbergTopology(this.getGoldbergFrequency(this.config.numPoints))
-            : this.generateSoccerBallTopology();
-        this.points = topology.points;
-        this.neighbors = topology.neighbors;
-        if (isGoldberg) {
+        const mode = this.config.topologyMode === 'goldberg' ? 'goldberg' : 'fibonacci';
+        this.config.topologyMode = mode;
+
+        if (mode === 'goldberg') {
+            const topology = this.generateGoldbergTopology(this.getGoldbergFrequency(this.config.numPoints));
+            this.points = topology.points;
+            this.neighbors = topology.neighbors;
             // Preserve Goldberg dual-cell geometry from topology generation.
             // We only derive ordered edge-neighbor indices for wall rendering.
             const built = this.buildFaceCells(topology.points, topology.neighbors);
             this.faceCells = topology.faceCells;
             this.faceCellEdgeNeighbors = built.edgeNeighbors;
-        } else {
-            this.faceCells = topology.faceCells;
-            this.faceCellEdgeNeighbors = topology.faceCellEdgeNeighbors || [];
+            return;
         }
+
+        const n = Math.max(12, Math.floor(this.config.numPoints || 12));
+        const pts = this.generateFibonacciPoints(n);
+        this.points = pts;
+        this.neighbors = this.buildNearestNeighborGraph(pts, 6);
+        const built = this.buildFaceCells(pts, this.neighbors);
+        this.faceCells = built.cells;
+        this.faceCellEdgeNeighbors = built.edgeNeighbors;
     },
 
     normalizePoint(v) {
@@ -640,6 +651,22 @@ const SphereFaceMazeCase = {
         return neighbors;
     },
 
+    generateFibonacciPoints(n) {
+        const pts = [];
+        const ga = Math.PI * (3 - Math.sqrt(5));
+        for (let i = 0; i < n; i++) {
+            const y = 1 - (i / Math.max(1, n - 1)) * 2;
+            const r = Math.sqrt(Math.max(0, 1 - y * y));
+            const theta = ga * i;
+            pts.push({
+                x: Math.cos(theta) * r,
+                y,
+                z: Math.sin(theta) * r
+            });
+        }
+        return pts;
+    },
+
     buildSphericalVoronoiGraph(pts) {
         const n = pts.length;
         if (n <= 1) return Array.from({ length: n }, () => []);
@@ -765,7 +792,7 @@ const SphereFaceMazeCase = {
     },
 
     getEffectivePointCount() {
-        if (this.config.topologyMode === 'soccer') return 32;
+        if (this.config.topologyMode !== 'goldberg') return Math.max(12, Math.floor(this.config.numPoints || 12));
         const freq = this.getGoldbergFrequency(this.config.numPoints);
         const t = freq * freq;
         return 10 * t + 2;
@@ -977,11 +1004,19 @@ const SphereFaceMazeCase = {
             this.goalNodeIdx = 0;
             return;
         }
+        const candidates = [];
+        for (let i = 0; i < this.points.length; i++) {
+            if (!this.walls || !this.walls.has(i)) candidates.push(i);
+        }
+        const source = candidates.length > 0
+            ? candidates
+            : Array.from({ length: this.points.length }, (_, i) => i);
+
         let maxY = -Infinity;
         let minY = Infinity;
-        let maxIdx = 0;
-        let minIdx = 0;
-        for (let i = 0; i < this.points.length; i++) {
+        let maxIdx = source[0];
+        let minIdx = source[0];
+        for (const i of source) {
             const y = this.points[i].y;
             if (y > maxY) {
                 maxY = y;
@@ -992,65 +1027,192 @@ const SphereFaceMazeCase = {
                 minIdx = i;
             }
         }
+        if (maxIdx === minIdx && source.length > 1) {
+            let best = source[0];
+            let bestD = -1;
+            const p = this.points[maxIdx];
+            for (const i of source) {
+                const q = this.points[i];
+                const d = (p.x - q.x) ** 2 + (p.y - q.y) ** 2 + (p.z - q.z) ** 2;
+                if (d > bestD) {
+                    bestD = d;
+                    best = i;
+                }
+            }
+            minIdx = best;
+        }
         this.startNodeIdx = maxIdx;
         this.goalNodeIdx = minIdx;
     },
 
     generateMaze() {
         this.walls = new Set();
-        this.faceColors = new Map(); // Restore visual colors
+        this.faceColors = new Map();
         const numFaces = this.points.length;
         for (let i = 0; i < numFaces; i++) this.walls.add(i);
 
-        // Visual: Color 50% of cells randomly (복구)
-        const indices = Array.from({ length: numFaces }, (_, i) => i);
-        for (let i = indices.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [indices[i], indices[j]] = [indices[j], indices[i]];
+        // Visual random tinting is intentionally disabled for now.
+        // Keep this block for quick re-enable later.
+        // const indices = Array.from({ length: numFaces }, (_, i) => i);
+        // for (let i = indices.length - 1; i > 0; i--) {
+        //     const j = Math.floor(Math.random() * (i + 1));
+        //     [indices[i], indices[j]] = [indices[j], indices[i]];
+        // }
+        // for (let i = 0; i < Math.floor(numFaces * 0.5); i++) {
+        //     this.faceColors.set(indices[i], this.vividColorForSeed(indices[i]));
+        // }
+
+
+
+        if (numFaces === 0) return;
+
+        const shuffle = (arr) => {
+            for (let i = arr.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [arr[i], arr[j]] = [arr[j], arr[i]];
+            }
+            return arr;
+        };
+
+        // Hex case parity-cell idea adapted to irregular face graph:
+        // choose a sparse independent cell set, then carve through bridges.
+        const ordered = shuffle(Array.from({ length: numFaces }, (_, i) => i));
+        const cellSet = new Set();
+        for (const idx of ordered) {
+            let touches = false;
+            for (const n of this.neighbors[idx]) {
+                if (cellSet.has(n)) {
+                    touches = true;
+                    break;
+                }
+            }
+            if (!touches) cellSet.add(idx);
         }
-        for (let i = 0; i < Math.floor(numFaces * 0.5); i++) {
-            this.faceColors.set(indices[i], this.vividColorForSeed(indices[i]));
+        if (cellSet.size < 2) {
+            for (let i = 0; i < numFaces; i += 2) cellSet.add(i);
         }
 
+        const cellList = Array.from(cellSet);
+        const d2Map = new Map();
+        for (const c of cellList) d2Map.set(c, []);
 
-
-        // 1. Distance-2 Neighbors Map
-        const d2Map = new Array(numFaces).fill(0).map(() => []);
-        for (let i = 0; i < numFaces; i++) {
-            for (const n1 of this.neighbors[i]) {
+        for (const c of cellList) {
+            const direct = new Set(this.neighbors[c]);
+            const seen = new Set();
+            for (const n1 of this.neighbors[c]) {
                 for (const n2 of this.neighbors[n1]) {
-                    if (n2 !== i && !this.neighbors[i].includes(n2)) {
-                        d2Map[i].push({ next: n2, bridge: n1 });
-                    }
+                    if (n2 === c) continue;
+                    if (!cellSet.has(n2)) continue;
+                    if (direct.has(n2)) continue;
+                    const key = `${n2}-${n1}`;
+                    if (seen.has(key)) continue;
+                    seen.add(key);
+                    d2Map.get(c).push({ next: n2, bridge: n1 });
                 }
             }
         }
 
-        // 2. Randomized DFS on Faces (D2 Jumps)
-        const visitedNodes = new Set();
-        const start = 0;
-        const stack = [start];
-        visitedNodes.add(start);
-        this.walls.delete(start);
+        const visited = new Set();
+        const seeds = shuffle(cellList.slice());
+        for (const seed of seeds) {
+            if (visited.has(seed)) continue;
+            visited.add(seed);
+            this.walls.delete(seed);
+            const stack = [seed];
 
-        while (stack.length > 0) {
-            const current = stack[stack.length - 1];
-            const options = d2Map[current].filter(opt => !visitedNodes.has(opt.next));
-
-            if (options.length > 0) {
+            while (stack.length > 0) {
+                const current = stack[stack.length - 1];
+                const options = (d2Map.get(current) || []).filter((opt) => !visited.has(opt.next));
+                if (options.length === 0) {
+                    stack.pop();
+                    continue;
+                }
                 const o = options[Math.floor(Math.random() * options.length)];
+                visited.add(o.next);
                 this.walls.delete(o.bridge);
                 this.walls.delete(o.next);
-                visitedNodes.add(o.next);
                 stack.push(o.next);
-            } else {
-                stack.pop();
             }
         }
-        
-        // Final punch: ensure entry and exit are NOT walls
-        if (this.startNodeIdx !== null) this.walls.delete(this.startNodeIdx);
-        if (this.goalNodeIdx !== null) this.walls.delete(this.goalNodeIdx);
+
+        // Hex-style growth pass: expand roads from dead-end-adjacent walls
+        // so the maze uses more surface area and gains richer branches.
+        const countOpenNeighbors = (idx) => {
+            let open = 0;
+            for (const n of this.neighbors[idx]) {
+                if (!this.walls.has(n)) open++;
+            }
+            return open;
+        };
+
+        let openCount = numFaces - this.walls.size;
+        const targetOpen = Math.floor(numFaces * (this.config.topologyMode === 'fibonacci' ? 0.78 : 0.70));
+        const eligible = shuffle(Array.from(this.walls).filter((idx) => countOpenNeighbors(idx) >= 1));
+        let guard = 0;
+        const guardMax = numFaces * 24;
+
+        while (eligible.length > 0 && openCount < targetOpen && guard < guardMax) {
+            guard++;
+            if (Math.random() < 0.2) {
+                const swapIdx = Math.floor(Math.random() * eligible.length);
+                const tmp = eligible[eligible.length - 1];
+                eligible[eligible.length - 1] = eligible[swapIdx];
+                eligible[swapIdx] = tmp;
+            }
+
+            const curr = eligible.pop();
+            if (!this.walls.has(curr)) continue;
+
+            const openNeighbors = countOpenNeighbors(curr);
+            const allowLoop = openNeighbors === 2 && Math.random() < 0.65;
+            const allowJunction = openNeighbors === 3 && Math.random() < 0.22;
+            if (openNeighbors !== 1 && !allowLoop && !allowJunction) continue;
+
+            this.walls.delete(curr);
+            openCount++;
+
+            for (const n of this.neighbors[curr]) {
+                if (this.walls.has(n)) eligible.push(n);
+            }
+        }
+    },
+
+    ensureEndpointsConnected() {
+        const start = this.startNodeIdx;
+        const goal = this.goalNodeIdx;
+        if (start == null || goal == null) return;
+        if (start === goal) return;
+        const n = this.points ? this.points.length : 0;
+        if (n === 0) return;
+
+        const dist = new Array(n).fill(Infinity);
+        const prev = new Array(n).fill(-1);
+        const deque = [];
+
+        dist[start] = 0;
+        deque.push(start);
+
+        while (deque.length > 0) {
+            const current = deque.shift();
+            if (current === goal) break;
+            const base = dist[current];
+            for (const next of this.neighbors[current]) {
+                const cost = this.walls.has(next) ? 1 : 0;
+                const nd = base + cost;
+                if (nd >= dist[next]) continue;
+                dist[next] = nd;
+                prev[next] = current;
+                if (cost === 0) deque.unshift(next);
+                else deque.push(next);
+            }
+        }
+
+        if (!isFinite(dist[goal])) return;
+        let curr = goal;
+        while (curr !== -1) {
+            this.walls.delete(curr);
+            curr = prev[curr];
+        }
     },
 
     clearSearchState() {
@@ -1421,7 +1583,9 @@ const SphereFaceMazeCase = {
                 fillStyle = renderTheme.current;
                 alpha = Math.min(1, depthAlpha * 1.0);
             } else if (this.explored.has(cell.idx)) {
-                fillStyle = renderTheme.explored;
+                fillStyle = (this.config.theme === 'rainbow' || this.config.theme === 'rainbow-vivid')
+                    ? '#FFFFFF'
+                    : renderTheme.explored;
                 alpha = Math.min(0.92, depthAlpha * 0.88);
             } else if (frontierSet.has(cell.idx)) {
                 fillStyle = renderTheme.frontier;
@@ -1431,11 +1595,14 @@ const SphereFaceMazeCase = {
                 fillStyle = this.faceColors.get(cell.idx);
                 alpha = 0.9;
             } else if (this.walls.has(cell.idx)) {
-                fillStyle = renderTheme.wall;
+                fillStyle = (this.config.theme === 'rainbow' || this.config.theme === 'rainbow-vivid')
+                    ? this.vividColorForSeed(cell.idx)
+                    : renderTheme.wall;
                 alpha = 1.0; 
             } else {
-                fillStyle = 'rgba(0, 0, 0, 0)'; 
-                alpha = 0;
+                // Keep road cells visible to avoid hollow triangular gaps in sparse topologies.
+                fillStyle = 'rgba(20, 24, 32, 0.62)';
+                alpha = Math.max(0.32, depthAlpha * 0.72);
             }
 
             ctx.globalAlpha = alpha;
@@ -1448,10 +1615,25 @@ const SphereFaceMazeCase = {
             ctx.fillStyle = fillStyle;
             ctx.fill();
 
-            ctx.globalAlpha = Math.max(0.2, depthAlpha * 0.34);
-            ctx.strokeStyle = 'rgba(26, 28, 34, 0.85)';
-            ctx.lineWidth = 0.7;
+            ctx.globalAlpha = Math.max(0.3, depthAlpha * 0.5);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)'; // Bright white for visibility
+            ctx.lineWidth = 0.8;
             ctx.stroke();
+
+            // VISUAL DEBUG: Draw '1' only for road cells.
+            if (center && cell.avgZ > -0.55) {
+                const isWall = this.walls.has(cell.idx);
+                if (isWall) {
+                    // Hide wall label ('0') per request.
+                } else {
+                ctx.globalAlpha = 1.0;
+                ctx.fillStyle = '#FF5555'; // Road: Red
+                ctx.font = 'bold 10px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('1', center.x, center.y);
+                }
+            }
 
             // Preserve clear start/goal anchors.
             if ((cell.idx === this.startNodeIdx || cell.idx === this.goalNodeIdx) && center && center.z > -0.3) {
@@ -1492,6 +1674,33 @@ const SphereFaceMazeCase = {
             }
         }
         ctx.globalAlpha = 1.0;
+
+        // Hex-style solution overlay line: connect revealed path centers.
+        if (this.path.length > 1 && this.pathProgress > 0) {
+            const limit = Math.min(this.path.length, this.pathProgress);
+            ctx.beginPath();
+            ctx.strokeStyle = '#FF0000';
+            ctx.lineWidth = 2.2;
+            ctx.lineJoin = 'round';
+            ctx.lineCap = 'round';
+
+            let penDown = false;
+            for (let i = 0; i < limit; i++) {
+                const nodeIdx = this.path[i];
+                const p = projected[nodeIdx];
+                if (!p || p.z < -0.3) {
+                    penDown = false;
+                    continue;
+                }
+                if (!penDown) {
+                    ctx.moveTo(p.x, p.y);
+                    penDown = true;
+                } else {
+                    ctx.lineTo(p.x, p.y);
+                }
+            }
+            ctx.stroke();
+        }
 
         this.drawScoreboard();
     },
