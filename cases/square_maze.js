@@ -523,17 +523,17 @@ const SquareMazeCase = {
         if (!this.ctx || !this.grid.length) return;
         const ctx = this.ctx;
         const theme = MazeEngine.themes[this.colorTheme] || MazeEngine.themes.ocean;
-        const gridW = this.cols * this.cellSize;
-        const gridH = this.rows * this.cellSize;
-        const ox = (this.width - gridW) * 0.5;
-        const oy = (this.height - gridH) * 0.5;
+        
+        // 1. Pixel Alignment: 0.5px offset for crisp lines
+        const ox = Math.floor((this.width - this.cols * this.cellSize) * 0.5) + 0.5;
+        const oy = Math.floor((this.height - this.rows * this.cellSize) * 0.5) + 0.5;
         const N = 1, E = 2, S = 4, W = 8;
 
         ctx.clearRect(0, 0, this.width, this.height);
         ctx.fillStyle = '#161c2a';
         ctx.fillRect(0, 0, this.width, this.height);
 
-        // Fill cells by state
+        // 2. Cell Fill Pass (Using floor to avoid anti-aliasing artifacts)
         for (let y = 0; y < this.rows; y++) {
             for (let x = 0; x < this.cols; x++) {
                 const k = `${x},${y}`;
@@ -549,18 +549,21 @@ const SquareMazeCase = {
                 if (fill) {
                     ctx.fillStyle = fill;
                     ctx.fillRect(
-                        ox + x * this.cellSize,
-                        oy + y * this.cellSize,
-                        this.cellSize,
-                        this.cellSize
+                        Math.floor(ox + x * this.cellSize),
+                        Math.floor(oy + y * this.cellSize),
+                        Math.ceil(this.cellSize),
+                        Math.ceil(this.cellSize)
                     );
                 }
             }
         }
 
-        // Walls
+        // 3. Walls Pass (Tiered: Inner vs Outer)
+        
+        // A. Inner Walls (Subtle/Thin)
         ctx.strokeStyle = theme.wall;
-        ctx.lineWidth = 2;
+        ctx.globalAlpha = 0.4;
+        ctx.lineWidth = 1.0;
         ctx.beginPath();
         for (let y = 0; y < this.rows; y++) {
             for (let x = 0; x < this.cols; x++) {
@@ -568,19 +571,41 @@ const SquareMazeCase = {
                 const px = ox + x * this.cellSize;
                 const py = oy + y * this.cellSize;
 
-                if (!(cell.open & N)) { ctx.moveTo(px, py); ctx.lineTo(px + this.cellSize, py); }
-                if (!(cell.open & E)) { ctx.moveTo(px + this.cellSize, py); ctx.lineTo(px + this.cellSize, py + this.cellSize); }
-                if (!(cell.open & S)) { ctx.moveTo(px, py + this.cellSize); ctx.lineTo(px + this.cellSize, py + this.cellSize); }
-                if (!(cell.open & W)) { ctx.moveTo(px, py); ctx.lineTo(px, py + this.cellSize); }
+                // Only draw internal lines here
+                if (!(cell.open & N) && y > 0) { ctx.moveTo(px, py); ctx.lineTo(px + this.cellSize, py); }
+                if (!(cell.open & E) && x < this.cols - 1) { ctx.moveTo(px + this.cellSize, py); ctx.lineTo(px + this.cellSize, py + this.cellSize); }
+                if (!(cell.open & S) && y < this.rows - 1) { ctx.moveTo(px, py + this.cellSize); ctx.lineTo(px + this.cellSize, py + this.cellSize); }
+                if (!(cell.open & W) && x > 0) { ctx.moveTo(px, py); ctx.lineTo(px, py + this.cellSize); }
             }
         }
         ctx.stroke();
 
-        // Path line overlay
+        // B. Outer Boundary (Strong/Thick)
+        ctx.globalAlpha = 1.0;
+        ctx.lineWidth = 2.0;
+        ctx.beginPath();
+        const fullW = this.cols * this.cellSize;
+        const fullH = this.rows * this.cellSize;
+        ctx.rect(ox, oy, fullW, fullH);
+        
+        // Also draw explicit outer-edge walls if they aren't 'open' (start/goal gaps)
+        for (let y = 0; y < this.rows; y++) {
+            for (let x = 0; x < this.cols; x++) {
+                const cell = this.grid[y][x];
+                const px = ox + x * this.cellSize, py = oy + y * this.cellSize;
+                if (y === 0 && !(cell.open & N)) { ctx.moveTo(px, py); ctx.lineTo(px + this.cellSize, py); }
+                if (x === this.cols - 1 && !(cell.open & E)) { ctx.moveTo(px + this.cellSize, py); ctx.lineTo(px + this.cellSize, py + this.cellSize); }
+                if (y === this.rows - 1 && !(cell.open & S)) { ctx.moveTo(px, py + this.cellSize); ctx.lineTo(px + this.cellSize, py + this.cellSize); }
+                if (x === 0 && !(cell.open & W)) { ctx.moveTo(px, py); ctx.lineTo(px, py + this.cellSize); }
+            }
+        }
+        ctx.stroke();
+
+        // 4. Path Line Overlay
         if (this.path.length > 1 && this.pathProgress > 0) {
             ctx.beginPath();
             ctx.strokeStyle = theme.current;
-            ctx.lineWidth = Math.max(2, this.cellSize * 0.16);
+            ctx.lineWidth = Math.max(2.5, this.cellSize * 0.2);
             ctx.lineJoin = 'round';
             ctx.lineCap = 'round';
             const p0 = this.path[0];
