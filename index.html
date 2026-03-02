@@ -23,6 +23,7 @@
             <div class="tab" data-case="fibonacci-maze">Fibonacci Maze</div>
             <div class="tab" data-case="circular">Circular Obstacles</div>
             <div class="tab" data-case="square-maze">Square Maze</div>
+            <div class="tab" data-case="water-maze">Water Flow Maze</div>
             <div class="tab" id="tab-poly" data-case="polygon-maze">Polygon Maze</div>
             <div class="tab" id="tab-sphere" data-case="sphere-maze">Sphere Maze</div>
             <div class="tab active" id="tab-sphere-face" data-case="sphere-face-maze">Sphere Face Maze</div>
@@ -66,6 +67,7 @@
     <script src="cases/square_maze.js"></script>
     <script src="cases/polygon_maze.js"></script>
     <script src="cases/sphere_maze.js"></script>
+    <script src="cases/square_water_maze.js"></script>
     <script src="cases/sphere_face_maze.js"></script>
     <script>
       document.querySelectorAll('.tab').forEach(tab => {
@@ -90,6 +92,10 @@
             document.getElementById('main-title').textContent = 'Square Grid Maze';
             document.getElementById('main-subtitle').textContent = 'Find the shortest path in a rectangular maze.';
             Core.loadCase(SquareMazeCase, { mode: 'interactive' });
+          } else if (caseName === 'water-maze') {
+            document.getElementById('main-title').textContent = 'Water Flow Simulation';
+            document.getElementById('main-subtitle').textContent = 'Gravity-driven water filling through a maze.';
+            Core.loadCase(SquareWaterMazeCase, { mode: 'interactive' });
           } else if (caseName === 'polygon-maze') {
             document.getElementById('main-title').textContent = 'Polygonal Voronoi Maze';
             document.getElementById('main-subtitle').textContent = 'Maze solving on an irregular polygonal grid.';

@@ -975,11 +975,10 @@ const HexMazeCase = {
         if (!ctx || !this.canvas) return;
 
         const liveMs = this.searchInProgress && this.searchStartedAtMs > 0
-            ? performance.now() - this.searchStartedAtMs + this.searchElapsedMs
+            ? performance.now() - this.searchStartedAtMs
             : this.searchElapsedMs;
         const timeLabel = this.formatMs(liveMs);
         const enteredNow = this.exploredSet.size;
-        
         const algorithmNames = {
             astar: 'A*',
             dijkstra: 'Dijkstra',
@@ -991,53 +990,15 @@ const HexMazeCase = {
 
         ctx.save();
 
-        // HUD Container (Glassmorphism effect)
-        const hudX = 20;
-        const hudY = 20;
-        const hudW = 160;
-        const hudH = 92;
-        const r = 8;
-
-        ctx.beginPath();
-        ctx.moveTo(hudX + r, hudY);
-        ctx.lineTo(hudX + hudW - r, hudY);
-        ctx.quadraticCurveTo(hudX + hudW, hudY, hudX + hudW, hudY + r);
-        ctx.lineTo(hudX + hudW, hudY + hudH - r);
-        ctx.quadraticCurveTo(hudX + hudW, hudY + hudH, hudX + hudW - r, hudY + hudH);
-        ctx.lineTo(hudX + r, hudY + hudH);
-        ctx.quadraticCurveTo(hudX, hudY + hudH, hudX, hudY + hudH - r);
-        ctx.lineTo(hudX, hudY + r);
-        ctx.quadraticCurveTo(hudX, hudY, hudX + r, hudY);
-        ctx.closePath();
-
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-
-        // Content
         ctx.fillStyle = '#FFFFFF';
-        ctx.font = '700 13px Inter, system-ui, sans-serif';
-        ctx.fillText(algorithmLabel.toUpperCase(), hudX + 12, hudY + 22);
+        ctx.font = '600 13px Inter, system-ui, sans-serif';
+        ctx.fillText(`Algorithm: ${algorithmLabel}`, 26, 36);
 
-        ctx.font = '500 11px Inter, system-ui, sans-serif';
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
-        
-        ctx.fillText('TIME', hudX + 12, hudY + 42);
-        ctx.fillStyle = '#fff';
-        ctx.fillText(timeLabel, hudX + 75, hudY + 42);
-
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
-        ctx.fillText('ENTERED', hudX + 12, hudY + 60);
-        ctx.fillStyle = '#fff';
-        ctx.fillText(enteredNow, hudX + 75, hudY + 60);
-
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
-        ctx.fillText('LAST', hudX + 12, hudY + 78);
-        ctx.fillStyle = '#fff';
-        ctx.fillText(this.lastEnteredHexCount, hudX + 75, hudY + 78);
-
+        ctx.font = '500 12px Inter, system-ui, sans-serif';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.fillText(`Time: ${timeLabel}`, 26, 58);
+        ctx.fillText(`Hex Entered: ${enteredNow}`, 26, 78);
+        ctx.fillText(`Last: ${this.lastEnteredHexCount}`, 26, 98);
         ctx.restore();
     },
 

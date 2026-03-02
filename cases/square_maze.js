@@ -39,7 +39,6 @@ const SquareMazeCase = {
     pathAnimTimer: null,
     searchInProgress: false,
     searchPaused: false,
-    waterLevels: new Map(),
 
     searchStartedAtMs: 0,
     searchElapsedMs: 0,
@@ -84,8 +83,7 @@ const SquareMazeCase = {
                     { value: 'dijkstra', label: 'Dijkstra' },
                     { value: 'greedy', label: 'Greedy Best-First' },
                     { value: 'bfs', label: 'Breadth-First Search' },
-                    { value: 'dfs', label: 'Depth-First Search' },
-                    { value: 'water', label: 'Water Flow (Gravity)' }
+                    { value: 'dfs', label: 'Depth-First Search' }
                 ],
                 onChange: (v) => {
                     this.searchMode = v;
@@ -319,7 +317,6 @@ const SquareMazeCase = {
             clearTimeout(this.pathAnimTimer);
             this.pathAnimTimer = null;
         }
-        this.waterLevels.clear();
     },
 
     stopSearchAnimation() {
@@ -338,13 +335,7 @@ const SquareMazeCase = {
         this.cameFrom.set(sKey, null);
         this.costSoFar.set(sKey, 0);
 
-        if (this.searchMode === 'water') {
-            const startNodes = [];
-            // Optional: Start from whole top row if user likes, but user asked for top-left start.
-            // Let's start from (0,0) as requested.
-            this.frontierPQ = new PriorityQueue();
-            this.frontierPQ.put(this.startNode, 0);
-        } else if (this.searchMode === 'bfs') {
+        if (this.searchMode === 'bfs') {
             this.frontierQueue = [this.startNode];
         } else if (this.searchMode === 'dfs') {
             this.frontierStack = [this.startNode];
@@ -437,52 +428,14 @@ const SquareMazeCase = {
             this.playStepSound();
             if (this.searchStartedAtMs > 0) this.searchElapsedMs = performance.now() - this.searchStartedAtMs;
 
-            const isGoal = this.searchMode === 'water' 
-                ? current.y === this.rows - 1 
-                : (current.x === this.goalNode.x && current.y === this.goalNode.y);
-
-            if (isGoal) {
-                if (this.searchMode === 'water') this.goalNode = current; // For path reconstruction
+            if (current.x === this.goalNode.x && current.y === this.goalNode.y) {
                 this.finishSearch(true);
                 return;
             }
 
-            if (this.searchMode === 'water') {
-                const level = (this.waterLevels.get(cKey) || 0) + 0.22;
-                this.waterLevels.set(cKey, Math.min(1, level));
-                
-                if (level < 1.0) {
-                    // Not full yet, stay here
-                    this.frontierPQ.put(current, this.costSoFar.get(cKey) || 0);
-                    this.frontierSet.add(cKey);
-                    this.exploredSet.delete(cKey); // Visual trick: only "explored" when full? 
-                                                  // No, let's keep it explored so it draws the fill.
-                    this.exploredSet.add(cKey);
-                    this.draw();
-                    this.searchTimer = setTimeout(() => this.stepSearch(), this.searchDelayMs);
-                    return;
-                }
-            }
-
             for (const next of this.getNeighbors(current)) {
                 const nKey = this.key(next);
-                let weight = 1;
-                if (this.searchMode === 'water') {
-                    if (next.y > current.y) weight = 1;      // Down: Easy
-                    else if (next.y === current.y) weight = 5; // Side: Medium
-                    else weight = 15;                       // Up: Hard (Pumping)
-                }
-
-                const newCost = (this.costSoFar.get(cKey) ?? 0) + weight;
-
-                if (this.searchMode === 'water') {
-                    if (!this.costSoFar.has(nKey) || newCost < this.costSoFar.get(nKey)) {
-                        this.costSoFar.set(nKey, newCost);
-                        this.cameFrom.set(nKey, current);
-                        this.pushFrontier(next, newCost);
-                    }
-                    continue;
-                }
+                const newCost = (this.costSoFar.get(cKey) ?? 0) + 1;
 
                 if (this.searchMode === 'bfs' || this.searchMode === 'dfs') {
                     if (this.cameFrom.has(nKey)) continue;
@@ -592,31 +545,6 @@ const SquareMazeCase = {
                 else if (this.frontierSet.has(k)) fill = theme.frontier;
                 else if (x === this.startNode.x && y === this.startNode.y) fill = theme.start;
                 else if (x === this.goalNode.x && y === this.goalNode.y) fill = theme.goal;
-
-                const waterLevel = this.waterLevels.get(k);
-                if (waterLevel !== undefined) {
-                    const cx = ox + x * this.cellSize;
-                    const cy = oy + y * this.cellSize;
-                    const fillH = this.cellSize * waterLevel;
-                    
-                    // Base background for the cell
-                    ctx.fillStyle = fill || 'rgba(30,35,45,0.3)';
-                    ctx.fillRect(cx, cy, this.cellSize, this.cellSize);
-
-                    // Water fill (Bottom up)
-                    const grad = ctx.createLinearGradient(cx, cy, cx, cy + this.cellSize);
-                    grad.addColorStop(0, '#3498db');
-                    grad.addColorStop(1, '#2980b9');
-                    ctx.fillStyle = grad;
-                    ctx.fillRect(cx, cy + (this.cellSize - fillH), this.cellSize, fillH);
-                    
-                    // Surface highlight
-                    if (waterLevel > 0 && waterLevel < 1) {
-                        ctx.fillStyle = 'rgba(255,255,255,0.4)';
-                        ctx.fillRect(cx, cy + (this.cellSize - fillH), this.cellSize, 1.5);
-                    }
-                    fill = null; // Prevent double fill from standard logic
-                }
 
                 if (fill) {
                     ctx.fillStyle = fill;
