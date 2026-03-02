@@ -288,52 +288,51 @@ const SquareWaterMazeCase = {
 
         // 1. Supply water to the inlet (Top-left)
         const startK = this.key(this.startNode);
-        let startLevel = (this.waterLevels.get(startK) || 0) + 0.4; // Strong supply
-        this.waterLevels.set(startK, Math.min(2.0, startLevel)); // Allow slight "over-pressure" for push
+        let startLevel = (this.waterLevels.get(startK) || 0) + 0.35; // Continuous supply
+        this.waterLevels.set(startK, Math.min(2.0, startLevel));
         this.exploredSet.add(startK);
 
         const currentLevels = new Map(this.waterLevels);
         const nextLevels = new Map(this.waterLevels);
+        
+        // Process bottom-up to ensure water "stacks" correctly
         const sortedKeys = Array.from(this.exploredSet).sort((a, b) => {
-            const yA = this.parseKey(a).y;
-            const yB = this.parseKey(b).y;
-            return yB - yA; // Process bottom-up for physics stability
+            return this.parseKey(b).y - this.parseKey(a).y;
         });
 
-        // 2. Physics Pass: Gravity -> Lateral -> Pressure
+        // 2. Physics Pass
         for (const k of sortedKeys) {
             const node = this.parseKey(k);
             let level = currentLevels.get(k) || 0;
-            if (level <= 0) continue;
+            if (level <= 0.001) continue;
 
             const neighbors = this.getNeighbors(node);
             const down = neighbors.find(n => n.dir === 'down');
             const sides = neighbors.filter(n => n.dir === 'side');
             const up = neighbors.find(n => n.dir === 'up');
 
-            // A. Gravity Drain (Waterfall)
+            // A. Gravity (Drain Downward) - Highest Priority
             if (down) {
                 const dk = this.key(down);
                 const dLevel = currentLevels.get(dk) || 0;
-                if (dLevel < 1.0) {
-                    const flow = Math.min(level, 0.6); // Fast drop
-                    nextLevels.set(k, Math.max(0, (nextLevels.get(k) || 0) - flow));
-                    nextLevels.set(dk, Math.min(1.2, (nextLevels.get(dk) || 0) + flow));
+                if (dLevel < 1.1) {
+                    const room = 1.1 - dLevel;
+                    const flow = Math.min(level, room, 0.7); // Fast gravity drain
+                    nextLevels.set(k, (nextLevels.get(k) || 0) - flow);
+                    nextLevels.set(dk, (nextLevels.get(dk) || 0) + flow);
                     this.exploredSet.add(dk);
                     if (!this.cameFrom.has(dk)) this.cameFrom.set(dk, node);
-                    continue; // Most energy spent falling
+                    continue; // Skip side/up if falling
                 }
             }
 
-            // B. Horizontal Equalization (Surface Leveling)
-            // Only if cannot fall or bottom is full
+            // B. Horizontal Leveling (Equalize surface height)
             for (const s of sides) {
                 const sk = this.key(s);
                 const sLevel = currentLevels.get(sk) || 0;
-                
-                // Only spread if we have enough level to actually push sideways
-                if (level > sLevel + 0.1) { 
-                    const diff = (level - sLevel) * 0.2;
+                // High k-factor (0.4) for rapid surface smoothing
+                const diff = (level - sLevel) * 0.42; 
+                if (Math.abs(diff) > 0.001) {
                     nextLevels.set(k, (nextLevels.get(k) || 0) - diff);
                     nextLevels.set(sk, (nextLevels.get(sk) || 0) + diff);
                     this.exploredSet.add(sk);
@@ -341,35 +340,41 @@ const SquareWaterMazeCase = {
                 }
             }
 
-            // C. Upward Pressure (Overflow)
-            if (level > 1.0 && up) {
+            // C. Pressure Upward (Overflow)
+            if (level > 1.02 && up) {
                 const uk = this.key(up);
                 const uLevel = currentLevels.get(uk) || 0;
-                const flow = (level - 1.0) * 0.4;
-                nextLevels.set(k, (nextLevels.get(k) || 0) - flow);
-                nextLevels.set(uk, (nextLevels.get(uk) || 0) + flow);
+                const push = (level - 1.0) * 0.5;
+                nextLevels.set(k, (nextLevels.get(k) || 0) - push);
+                nextLevels.set(uk, (nextLevels.get(uk) || 0) + push);
                 this.exploredSet.add(uk);
                 if (!this.cameFrom.has(uk)) this.cameFrom.set(uk, node);
             }
         }
 
-        // Clamp levels to visual range
+        // Apply and Clamp
         for (const [k, v] of nextLevels) {
-            this.waterLevels.set(k, Math.max(0, Math.min(1.2, v)));
+            this.waterLevels.set(k, Math.max(0, Math.min(1.5, v)));
         }
 
-        // Check Goal
+        // Clean up empty cells from explored set
         for (const k of Array.from(this.exploredSet)) {
-            const node = this.parseKey(k);
-            if (node.y === this.rows - 1 && this.waterLevels.get(k) > 0.05) {
-                this.goalNode = node;
-                this.finishSearch(true);
-                return;
+            if (this.waterLevels.get(k) < 0.01) {
+                // Keep it in explored if it was part of pathfinding, but maybe prune for performance
             }
         }
 
         this.playStepSound();
         this.draw();
+        
+        // Check for arrival at bottom
+        const reachedBottom = Array.from(this.waterLevels.entries())
+            .some(([k, v]) => this.parseKey(k).y === this.rows - 1 && v > 0.1);
+        
+        if (reachedBottom && !this.searchInProgress) {
+            // Already finished, but we're simulating flow
+        }
+
         this.searchTimer = setTimeout(() => this.stepSearch(), this.searchDelayMs);
     },
 
@@ -419,18 +424,8 @@ const SquareWaterMazeCase = {
                 ctx.fillStyle = 'rgba(255,255,255,0.03)';
                 ctx.fillRect(px, py, this.cellSize, this.cellSize);
 
-                if (level > 0.03) {
-                    const cx = px + this.cellSize * 0.5;
-                    const cy = py + this.cellSize * 0.5;
-                    
-                    // Determine if streaming down or pooling
-                    const cell = this.grid[y][x];
-                    const downOpen = (cell.open & 4);
-                    const belowKey = this.key({x, y: y + 1});
-                    const belowLevel = this.waterLevels.get(belowKey) || 0;
-                    
-                    const isStreaming = downOpen && belowLevel < 0.8;
-                    const visualLevel = Math.max(0.08, Math.min(1.0, level));
+                if (level > 0.02) {
+                    const visualLevel = Math.min(1.0, level);
                     const fillH = this.cellSize * visualLevel;
 
                     const grad = ctx.createLinearGradient(px, py, px, py + this.cellSize);
@@ -438,20 +433,15 @@ const SquareWaterMazeCase = {
                     grad.addColorStop(1, '#1d4ed8');
                     ctx.fillStyle = grad;
 
-                    if (isStreaming && level < 0.9) {
-                        // Draw as a vertical stream (Waterfall)
-                        const streamW = this.cellSize * (0.3 + level * 0.4);
-                        ctx.fillRect(px + (this.cellSize - streamW) * 0.5, py, streamW, this.cellSize);
-                    } else {
-                        // Draw as a rising pool
-                        ctx.fillRect(px, py + (this.cellSize - fillH), this.cellSize, fillH);
-                        
-                        // Surface Highlight & Ripple
-                        if (visualLevel < 0.98) {
-                            const ripple = Math.sin(Date.now() * 0.01 + x * 0.5) * 1.5;
-                            ctx.fillStyle = 'rgba(191,219,254,0.7)';
-                            ctx.fillRect(px, py + (this.cellSize - fillH) + ripple, this.cellSize, 2);
-                        }
+                    // Draw as a rising pool (More consistent horizontal look)
+                    // Slightly overlap cells to prevent gaps
+                    ctx.fillRect(px - 0.5, py + (this.cellSize - fillH), this.cellSize + 1, fillH + 0.5);
+                    
+                    // Surface Highlight & Ripple
+                    if (visualLevel < 0.99) {
+                        const ripple = Math.sin(Date.now() * 0.01 + x * 0.5) * 1.5;
+                        ctx.fillStyle = 'rgba(191,219,254,0.7)';
+                        ctx.fillRect(px, py + (this.cellSize - fillH) + ripple, this.cellSize, 2);
                     }
                 }
             }
