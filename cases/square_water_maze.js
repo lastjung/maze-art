@@ -284,74 +284,102 @@ const SquareWaterMazeCase = {
     },
 
     stepSearch() {
-        if (!this.frontierPQ || this.frontierPQ.empty()) {
+        if (!this.searchInProgress || this.searchPaused) return;
+
+        const activeKeys = Array.from(this.exploredSet).filter(k => (this.waterLevels.get(k) || 0) < 1.0);
+        const frontierKeys = Array.from(this.frontierSet);
+        const allRelevant = [...new Set([...activeKeys, ...frontierKeys])];
+
+        if (allRelevant.length === 0 && this.frontierPQ.empty()) {
             this.finishSearch(false);
             return;
         }
 
-        const current = this.frontierPQ.get();
-        const cKey = this.key(current);
-        this.frontierSet.delete(cKey);
-        
-        // --- 1. Update Pressure & Water Level ---
-        let p = this.pressures.get(cKey) || 0;
-        let level = this.waterLevels.get(cKey) || 0;
-        
-        // Water flows from high pressure areas
-        level += 0.25; // Fill speed
-        this.waterLevels.set(cKey, Math.min(1.0, level));
-        this.exploredSet.add(cKey);
-        this.currentNode = current;
-        this.playStepSound();
-
-        // --- 2. Check Goal (Bottom line) ---
-        if (current.y === this.rows - 1) {
-            this.goalNode = current;
-            this.finishSearch(true);
-            return;
+        // --- 1. Fill & Pressure Update (Parallel-ish) ---
+        for (const k of allRelevant) {
+            let level = this.waterLevels.get(k) || 0;
+            // Naturally fill active cells
+            if (level < 1.0) {
+                level += 0.15; // Base fill rate
+                this.waterLevels.set(k, Math.min(1.0, level));
+            }
+            this.exploredSet.add(k);
+            this.frontierSet.delete(k);
         }
 
-        // --- 3. Flow Distribution Logic ---
-        const neighbors = this.getNeighbors(current);
-        
-        // Sort neighbors to prioritize down, side, up
-        neighbors.sort((a, b) => {
-            const score = { down: 1, side: 5, up: 15 };
-            return score[a.dir] - score[b.dir];
-        });
+        // --- 2. Horizontal Equalization (Pressure Leveling) ---
+        const k_factor = 0.18;
+        const currentLevels = new Map(this.waterLevels);
+        for (const k of allRelevant) {
+            const node = this.parseKey(k);
+            const levelA = currentLevels.get(k) || 0;
+            if (levelA <= 0) continue;
 
-        // Determine if we can spread based on user rules
-        const canSucceed = level >= 0.95; 
-        
-        if (canSucceed) {
+            // Only equalize with side neighbors for horizontal surface
+            const neighbors = this.getNeighbors(node).filter(n => n.dir === 'side');
             for (const next of neighbors) {
-                const nKey = this.key(next);
+                const nk = this.key(next);
+                const levelB = currentLevels.get(nk) || 0;
                 
-                // Rule: up 전파 조건 (level >= 0.9 + below blocked/full)
-                if (next.dir === 'up') {
-                    const below = { x: current.x, y: current.y + 1 };
-                    const bKey = this.key(below);
-                    const bOpen = (this.grid[current.y][current.x].open & 4);
-                    const bFull = !bOpen || (this.waterLevels.get(bKey) >= 0.95);
-                    if (!bFull) continue; // Only go up if below is blocked or full
-                }
-
-                const weight = { down: 1, side: 6, up: 20 }[next.dir];
-                const newCost = (this.costSoFar.get(cKey) || 0) + weight;
-
-                if (!this.costSoFar.has(nKey) || newCost < this.costSoFar.get(nKey)) {
-                    this.costSoFar.set(nKey, newCost);
-                    this.cameFrom.set(nKey, current);
-                    this.frontierPQ.put(next, newCost);
-                    this.frontierSet.add(nKey);
+                // Exchange flow: delta = (A - B) * k
+                const delta = (levelA - levelB) * k_factor;
+                this.waterLevels.set(k, (this.waterLevels.get(k) || 0) - delta);
+                this.waterLevels.set(nk, (this.waterLevels.get(nk) || 0) + delta);
+                
+                if (this.waterLevels.get(nk) > 0.05) {
+                    this.exploredSet.add(nk);
+                    if (!this.cameFrom.has(nk)) this.cameFrom.set(nk, node);
                 }
             }
-        } else {
-            // Stay in PQ to finish filling
-            this.frontierPQ.put(current, (this.costSoFar.get(cKey) || 0));
-            this.frontierSet.add(cKey);
         }
 
+        // --- 3. Propagation (Level-centric Trigger) ---
+        const nextFrontier = new Set();
+        for (const k of Array.from(this.exploredSet)) {
+            const level = this.waterLevels.get(k) || 0;
+            if (level <= 0.05) continue;
+
+            const node = this.parseKey(k);
+            // Check Goal
+            if (node.y === this.rows - 1) {
+                this.goalNode = node;
+                this.finishSearch(true);
+                return;
+            }
+
+            const neighbors = this.getNeighbors(node);
+            for (const next of neighbors) {
+                const nk = this.key(next);
+                if (this.waterLevels.get(nk) >= 0.98) continue;
+
+                let canFlow = false;
+                if (next.dir === 'down') {
+                    canFlow = level >= 0.1; // Drops almost immediately
+                } else if (next.dir === 'side') {
+                    canFlow = level >= 0.6; // Needs to fill halfway to push side
+                } else if (next.dir === 'up') {
+                    // Upward: level >= 0.95 AND below is blocked or full
+                    const belowOpen = (this.grid[node.y][node.x].open & 4);
+                    const belowFull = !belowOpen || (this.waterLevels.get(this.key({x: node.x, y: node.y + 1})) >= 0.9);
+                    canFlow = level >= 0.95 && belowFull;
+                }
+
+                if (canFlow) {
+                    if (!this.exploredSet.has(nk)) {
+                        nextFrontier.add(nk);
+                        if (!this.cameFrom.has(nk)) this.cameFrom.set(nk, node);
+                    }
+                }
+            }
+        }
+
+        for (const nk of nextFrontier) {
+            this.frontierSet.add(nk);
+            const node = this.parseKey(nk);
+            this.frontierPQ.put(node, node.y); // Priority still helps a bit with ordering
+        }
+
+        this.playStepSound();
         this.draw();
         this.searchTimer = setTimeout(() => this.stepSearch(), this.searchDelayMs);
     },
