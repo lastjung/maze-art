@@ -102,7 +102,7 @@ const SquareWaterMazeCase = {
                 }
             },
             { type: 'info', label: 'Start (Top-Left)', value: 'Water Inlet' },
-            { type: 'info', label: 'Goal (Bottom Line)', value: 'Catch Basin' },
+            { type: 'info', label: 'Goal (Bottom-Right)', value: 'Drain' },
             { type: 'info', label: 'Logic', value: 'Gravity + Pressure Overflow' }
         ];
     },
@@ -240,13 +240,37 @@ const SquareWaterMazeCase = {
     },
 
     playStepSound() {
+        if (!this.sfxEnabled || this.sfxVolume <= 0) return;
         const now = performance.now();
-        if (now - this.lastStepSoundAt < 40) return;
+        if (now - this.lastStepSoundAt < 60) return;
         this.lastStepSoundAt = now;
         this.stepSoundTick += 1;
         if (this.stepSoundTick % 2 !== 0) return;
-        const pitch = 180 + (this.stepSoundTick % 12) * 12;
-        MazeEngine.playTone(pitch, 0.04, 'sine', 0.3, 0.002, this);
+
+        const ctx = MazeEngine.ensureAudioContext(this.sfxEnabled);
+        if (!ctx) return;
+
+        const t = ctx.currentTime;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        // Water drip: high→low frequency sweep
+        const startFreq = 600 + Math.random() * 400;  // 600-1000 Hz
+        const endFreq = 150 + Math.random() * 100;     // 150-250 Hz
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(startFreq, t);
+        osc.frequency.exponentialRampToValueAtTime(endFreq, t + 0.06);
+
+        // Quick attack, fast decay (drip envelope)
+        const vol = Math.max(0, Math.min(1, this.sfxVolume * 0.8));
+        gain.gain.setValueAtTime(0.001, t);
+        gain.gain.linearRampToValueAtTime(vol, t + 0.003);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(t);
+        osc.stop(t + 0.1);
     },
 
     finishSearch(found) {
@@ -293,83 +317,61 @@ const SquareWaterMazeCase = {
         const current = this.frontierPQ.get();
         const cKey = this.key(current);
         this.frontierSet.delete(cKey);
+
+        // --- 1. Skip if already full ---
+        const existingLevel = this.waterLevels.get(cKey) || 0;
+        if (existingLevel >= 1.0) {
+            // Already full, just move to next
+            if (!this.frontierPQ.empty()) {
+                this.searchTimer = setTimeout(() => this.stepSearch(), this.searchDelayMs);
+            } else {
+                this.finishSearch(false);
+            }
+            return;
+        }
         
-        // --- 1. Update Water Level ---
-        let level = this.waterLevels.get(cKey) || 0;
-        level += 0.35; // Faster fill for better response
-        this.waterLevels.set(cKey, Math.min(1.0, level));
+        // --- 2. Fill this cell ---
+        const level = Math.min(1.0, existingLevel + 0.35);
+        this.waterLevels.set(cKey, level);
         this.exploredSet.add(cKey);
         this.currentNode = current;
+        this.playStepSound();
+        if (this.searchStartedAtMs > 0) this.searchElapsedMs = performance.now() - this.searchStartedAtMs;
 
-        // --- 2. Global Horizontal Equalization (Physics Tick) ---
-        // This spreads pressure horizontally across all explored cells
-        const kEqualize = 0.18; 
-        for (const key of this.exploredSet) {
-            const [x, y] = key.split(',').map(Number);
-            const lA = this.waterLevels.get(key) || 0;
-            if (lA < 0.05) continue;
-
-            const neighbors = [];
-            // Only side neighbors for horizontal leveling
-            const gridCell = this.grid[y][x];
-            if (gridCell.open & 2) neighbors.push({x: x + 1, y: y}); // East
-            if (gridCell.open & 8) neighbors.push({x: x - 1, y: y}); // West
-
-            for (const n of neighbors) {
-                const nK = this.key(n);
-                if (!this.exploredSet.has(nK)) continue;
-                const lB = this.waterLevels.get(nK) || 0;
-                const delta = (lA - lB) * kEqualize;
-                if (Math.abs(delta) > 0.001) {
-                    this.waterLevels.set(key, lA - delta);
-                    this.waterLevels.set(nK, lB + delta);
-                }
-            }
-        }
-
-        // --- 3. Check Goal ---
-        if (current.y === this.rows - 1 && level > 0.5) {
-            this.goalNode = current;
+        // --- 3. Check Goal (specific cell: bottom-right) ---
+        if (current.x === this.goalNode.x && current.y === this.goalNode.y && level > 0.5) {
+            this.waterLevels.set(cKey, 1.0);
             this.finishSearch(true);
             return;
         }
 
-        // --- 4. Flow Distribution Logic ---
-        const neighbors = this.getNeighbors(current);
-        
-        // Sort to check down, then side, then up
-        neighbors.sort((a, b) => {
-            const score = { down: 1, side: 5, up: 10 };
-            return score[a.dir] - score[b.dir];
-        });
-
-        const canSpread = level >= 0.85; 
-        if (canSpread) {
+        // --- 4. Flow Distribution ---
+        if (level >= 0.85) {
+            const neighbors = this.getNeighbors(current);
+            
             for (const next of neighbors) {
                 const nKey = this.key(next);
-                
-                // REFLUX (UP) Condition: Only if below path is full/blocked
-                if (next.dir === 'up') {
-                    const belowY = current.y + 1;
-                    const belowOpen = (this.grid[current.y][current.x].open & 4);
-                    const belowFull = !belowOpen || (this.waterLevels.get(`${current.x},${belowY}`) >= 0.95);
-                    if (!belowFull) continue; 
-                }
+                const nLevel = this.waterLevels.get(nKey) || 0;
 
-                // [FIX] Lower costs to allow "Up" (12) to compete for priority
-                const weight = { down: 1, side: 4, up: 12 }[next.dir];
-                const newCost = (this.costSoFar.get(cKey) || 0) + weight;
+                // Skip cells that are already full
+                if (nLevel >= 1.0) continue;
 
-                if (!this.costSoFar.has(nKey) || newCost < (this.costSoFar.get(nKey) || Infinity)) {
-                    this.costSoFar.set(nKey, newCost);
-                    this.cameFrom.set(nKey, current);
-                    this.frontierPQ.put(next, newCost);
+                // Priority: gravity pulls water down, but allows upward flow
+                const weight = { down: 0, side: 3, up: 8 }[next.dir];
+                const gravityPriority = -next.y + weight;
+
+                if (!this.frontierSet.has(nKey)) {
+                    // Track path for reconstruction
+                    if (!this.cameFrom.has(nKey)) {
+                        this.cameFrom.set(nKey, current);
+                    }
+                    this.frontierPQ.put(next, gravityPriority);
                     this.frontierSet.add(nKey);
                 }
             }
         } else {
-            // Re-queue to finish filling current cell
-            this.frontierPQ.put(current, (this.costSoFar.get(cKey) || 0));
+            // Not full yet — re-queue to keep filling
+            this.frontierPQ.put(current, -current.y);
             this.frontierSet.add(cKey);
         }
 
@@ -465,8 +467,8 @@ const SquareWaterMazeCase = {
         // 4. Walls Pass (Tiered: Inner vs Outer)
         const N = 1, E = 2, S = 4, W = 8;
         
-        // A. Inner Walls (Subtle/Dark)
-        ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+        // A. Inner Walls
+        ctx.strokeStyle = 'rgba(255,255,255,0.55)';
         ctx.lineWidth = 1.0;
         ctx.beginPath();
         for (let y = 0; y < this.rows; y++) {
@@ -482,7 +484,7 @@ const SquareWaterMazeCase = {
         ctx.stroke();
 
         // B. Outer Boundary (Crisp/White)
-        ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+        ctx.strokeStyle = 'rgba(255,255,255,0.55)';
         ctx.lineWidth = 1.5;
         ctx.beginPath();
         for (let y = 0; y < this.rows; y++) {
@@ -497,11 +499,28 @@ const SquareWaterMazeCase = {
         }
         ctx.stroke();
 
-        // 5. Path Highlights
+        // 5. Start & Goal Markers
+        const cs = this.cellSize;
+        // Start (green)
+        ctx.fillStyle = 'rgba(0, 200, 0, 0.6)';
+        ctx.fillRect(
+            Math.floor(ox + this.startNode.x * cs),
+            Math.floor(oy + this.startNode.y * cs),
+            Math.ceil(cs), Math.ceil(cs)
+        );
+        // Goal (red)
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.6)';
+        ctx.fillRect(
+            Math.floor(ox + this.goalNode.x * cs),
+            Math.floor(oy + this.goalNode.y * cs),
+            Math.ceil(cs), Math.ceil(cs)
+        );
+
+        // 6. Path Highlights
         if (this.path.length > 0 && this.pathProgress > 0) {
             ctx.save();
             ctx.beginPath();
-            ctx.strokeStyle = 'rgba(96, 165, 250, 0.5)';
+            ctx.strokeStyle = 'rgba(255, 0, 0, 0.8)';
             ctx.lineWidth = 4;
             ctx.setLineDash([5, 5]);
             const limit = Math.min(this.path.length, this.pathProgress);

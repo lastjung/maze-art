@@ -70,51 +70,44 @@
     <script src="cases/square_water_maze.js"></script>
     <script src="cases/sphere_face_maze.js"></script>
     <script>
+      const caseMap = {
+        'hex-maze':        { title: 'Hexagon Maze',                sub: 'Find the shortest path in a hex grid.',                  obj: () => HexMazeCase },
+        'fibonacci-maze':  { title: 'Fibonacci Hex Maze',          sub: 'Pathfinding through golden angle seeds.',                 obj: () => FibonacciMazeCase },
+        'circular':        { title: 'Circular Obstacle Pathfinding',sub: 'Find a path around round obstacles.',                    obj: () => CircularPathfindingCase },
+        'square-maze':     { title: 'Square Grid Maze',            sub: 'Find the shortest path in a rectangular maze.',           obj: () => SquareMazeCase },
+        'water-maze':      { title: 'Water Flow Simulation',       sub: 'Gravity-driven water filling through a maze.',            obj: () => SquareWaterMazeCase },
+        'polygon-maze':    { title: 'Polygonal Voronoi Maze',      sub: 'Maze solving on an irregular polygonal grid.',            obj: () => PolygonMazeCase },
+        'sphere-maze':     { title: 'Spherical Voronoi Maze',      sub: 'Maze solving on a rotating 3D-projected sphere.',         obj: () => SphereMazeCase },
+        'sphere-face-maze':{ title: 'Goldberg Face Maze',          sub: 'Pathfinding by traversing polyhedron faces on a sphere.', obj: () => SphereFaceMazeCase }
+      };
+
+      function loadCaseByName(name) {
+        const info = caseMap[name];
+        if (!info) return false;
+        try {
+          const caseObj = info.obj();
+          if (!caseObj) return false;
+          document.getElementById('main-title').textContent = info.title;
+          document.getElementById('main-subtitle').textContent = info.sub;
+          document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+          const activeTab = document.querySelector(`.tab[data-case="${name}"]`);
+          if (activeTab) activeTab.classList.add('active');
+          Core.loadCase(caseObj, { mode: 'interactive' });
+          localStorage.setItem('maze-art-case', name);
+          return true;
+        } catch(e) { return false; }
+      }
+
       document.querySelectorAll('.tab').forEach(tab => {
         tab.addEventListener('click', () => {
-          document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-          tab.classList.add('active');
-
-          const caseName = tab.getAttribute('data-case');
-          if (caseName === 'hex-maze') {
-            document.getElementById('main-title').textContent = 'Hexagon Maze';
-            document.getElementById('main-subtitle').textContent = 'Find the shortest path in a hex grid.';
-            Core.loadCase(HexMazeCase, { mode: 'interactive' });
-          } else if (caseName === 'fibonacci-maze') {
-            document.getElementById('main-title').textContent = 'Fibonacci Hex Maze';
-            document.getElementById('main-subtitle').textContent = 'Pathfinding through golden angle seeds.';
-            Core.loadCase(FibonacciMazeCase, { mode: 'interactive' });
-          } else if (caseName === 'circular') {
-            document.getElementById('main-title').textContent = 'Circular Obstacle Pathfinding';
-            document.getElementById('main-subtitle').textContent = 'Find a path around round obstacles.';
-            Core.loadCase(CircularPathfindingCase, { mode: 'interactive' });
-          } else if (caseName === 'square-maze') {
-            document.getElementById('main-title').textContent = 'Square Grid Maze';
-            document.getElementById('main-subtitle').textContent = 'Find the shortest path in a rectangular maze.';
-            Core.loadCase(SquareMazeCase, { mode: 'interactive' });
-          } else if (caseName === 'water-maze') {
-            document.getElementById('main-title').textContent = 'Water Flow Simulation';
-            document.getElementById('main-subtitle').textContent = 'Gravity-driven water filling through a maze.';
-            Core.loadCase(SquareWaterMazeCase, { mode: 'interactive' });
-          } else if (caseName === 'polygon-maze') {
-            document.getElementById('main-title').textContent = 'Polygonal Voronoi Maze';
-            document.getElementById('main-subtitle').textContent = 'Maze solving on an irregular polygonal grid.';
-            Core.loadCase(PolygonMazeCase, { mode: 'interactive' });
-          } else if (caseName === 'sphere-maze') {
-            document.getElementById('main-title').textContent = 'Spherical Voronoi Maze';
-            document.getElementById('main-subtitle').textContent = 'Maze solving on a rotating 3D-projected sphere.';
-            Core.loadCase(SphereMazeCase, { mode: 'interactive' });
-          } else if (caseName === 'sphere-face-maze') {
-            document.getElementById('main-title').textContent = 'Goldberg Face Maze';
-            document.getElementById('main-subtitle').textContent = 'Pathfinding by traversing polyhedron faces on a sphere.';
-            Core.loadCase(SphereFaceMazeCase, { mode: 'interactive' });
-          }
+          loadCaseByName(tab.getAttribute('data-case'));
         });
       });
 
       window.onload = () => {
-        if (typeof SquareMazeCase !== 'undefined') {
-          Core.loadCase(SquareMazeCase, { mode: 'interactive' });
+        const saved = localStorage.getItem('maze-art-case');
+        if (!saved || !loadCaseByName(saved)) {
+          loadCaseByName('square-maze');
         }
       };
     </script>
