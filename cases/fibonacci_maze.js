@@ -484,9 +484,6 @@ const FibonacciMazeCase = {
             this.currentNode = current;
             this.exploredSet.add(currentKey);
             this.playStepSound();
-            if (this.searchStartedAtMs > 0) {
-                this.searchElapsedMs = performance.now() - this.searchStartedAtMs;
-            }
 
             if (current.q === this.goalNode.q && current.r === this.goalNode.r) {
                 this.finishSearch(true);

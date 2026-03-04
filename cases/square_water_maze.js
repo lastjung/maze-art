@@ -217,6 +217,8 @@ const SquareWaterMazeCase = {
         this.searchPaused = false;
         this.stepSoundTick = 0;
         this.lastStepSoundAt = 0;
+        this.searchElapsedMs = 0;
+        this.searchStartedAtMs = 0;
     },
 
     stopSearchAnimation() {
@@ -336,7 +338,6 @@ const SquareWaterMazeCase = {
         this.exploredSet.add(cKey);
         this.currentNode = current;
         this.playStepSound();
-        if (this.searchStartedAtMs > 0) this.searchElapsedMs = performance.now() - this.searchStartedAtMs;
 
         // --- 3. Check Goal (specific cell: bottom-right) ---
         if (current.x === this.goalNode.x && current.y === this.goalNode.y && level > 0.5) {

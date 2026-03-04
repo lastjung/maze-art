@@ -314,6 +314,8 @@ const SquareMazeCase = {
         this.searchPaused = false;
         this.stepSoundTick = 0;
         this.lastStepSoundAt = 0;
+        this.searchElapsedMs = 0;
+        this.searchStartedAtMs = 0;
         if (this.pathAnimTimer) {
             clearTimeout(this.pathAnimTimer);
             this.pathAnimTimer = null;
@@ -427,7 +429,6 @@ const SquareMazeCase = {
             this.currentNode = current;
             this.exploredSet.add(cKey);
             this.playStepSound();
-            if (this.searchStartedAtMs > 0) this.searchElapsedMs = performance.now() - this.searchStartedAtMs;
 
             if (current.x === this.goalNode.x && current.y === this.goalNode.y) {
                 this.finishSearch(true);
