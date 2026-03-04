@@ -401,6 +401,10 @@ const Core = {
     setupGlobalEvents() {
          // ESC to exit cinematic mode or toggle recording
         document.addEventListener('keydown', (e) => {
+            // Skip if user is typing in an input
+            const tag = document.activeElement?.tagName?.toLowerCase();
+            const isTyping = tag === 'input' || tag === 'textarea' || tag === 'select';
+
             if (e.key === 'Escape') {
                 if (document.body.classList.contains('hide-ui')) {
                     this.toggleCinematicMode();
@@ -409,7 +413,39 @@ const Core = {
                    // this.toggleRecording(); 
                 }
             }
+            // Spacebar triggers Go/Pause
+            if ((e.key === ' ' || e.code === 'Space') && !isTyping) {
+                e.preventDefault();
+                this.togglePlay();
+            }
+            // [ / ] keys adjust the first speed slider
+            if ((e.key === '[' || e.key === ']') && !isTyping) {
+                e.preventDefault();
+                this.adjustSpeedSlider(e.key === ']' ? 1 : -1);
+            }
         });
+    },
+
+    adjustSpeedSlider(direction) {
+        const c = this.currentCase;
+        if (!c || !c.uiConfig) return;
+        // Find the first speed slider in the current case's uiConfig
+        const speedCtrl = c.uiConfig.find(ctrl => ctrl.type === 'slider' && ctrl.id.toLowerCase().includes('speed'));
+        if (!speedCtrl) return;
+
+        const step = speedCtrl.step || 1;
+        const oldVal = parseFloat(document.getElementById(speedCtrl.id)?.value ?? speedCtrl.value);
+        const newVal = Math.min(speedCtrl.max, Math.max(speedCtrl.min, oldVal + step * 2 * direction));
+        if (newVal === oldVal) return;
+
+        // Update the slider DOM element and display value
+        const slider = document.getElementById(speedCtrl.id);
+        const valDisplay = document.getElementById(`val-${speedCtrl.id}`);
+        if (slider) slider.value = newVal;
+        if (valDisplay) valDisplay.textContent = newVal;
+
+        // Trigger the onChange callback
+        if (speedCtrl.onChange) speedCtrl.onChange(newVal, valDisplay);
     },
     
     // Kept for backward compatibility or future use

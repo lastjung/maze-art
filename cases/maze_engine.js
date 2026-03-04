@@ -45,14 +45,14 @@ const MazeEngine = {
     
     // Default shared themes
     themes: {
-        rainbow: {
-            wall: '#FFFFFF',        // Dynamically overridden by hsl in the render loop
+        monochrome: {
+            wall: '#FFFFFF',        // White walls
             explored: '#FFFFFF',    // White
             frontier: '#FFFFFF',    // White
             start: '#00FF00',       // Bright Green
             goal: '#FF0000',        // Universal Red Goal
-            path: 'rgba(0, 0, 0, 0.65)', // Black tinted path cells
-            current: '#000000'      // Pure black path LINE
+            path: 'rgba(255, 255, 255, 0.30)', // Subtle white fill for path cells
+            current: '#FFFFFF'      // White path LINE
         },
         basic: {
             wall: '#86efac',        // Green
@@ -91,6 +91,9 @@ const MazeEngine = {
             current: '#FF00FF'      // Magenta/Pink for the path LINE
         }
     },
+
+    // Backward compatibility: 'rainbow' key points to 'monochrome'
+    // (other cases like hex_maze, fibonacci_maze still reference 'rainbow')
 
     // -------------------------------------------------------------
     // Shared Hex Grid Math
@@ -342,3 +345,6 @@ const MazeEngine = {
 
 window.PriorityQueue = PriorityQueue;
 window.MazeEngine = MazeEngine;
+
+// Backward compatibility alias
+MazeEngine.themes.rainbow = MazeEngine.themes.monochrome;

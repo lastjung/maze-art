@@ -96,11 +96,12 @@ const SquareMazeCase = {
                 label: 'Color Theme',
                 value: this.colorTheme,
                 options: [
-                    { value: 'rainbow', label: '0. Default (Rainbow)' },
-                    { value: 'basic', label: '1. Basic (Green/Pink)' },
-                    { value: 'ocean', label: '2. Ocean (Cyan/Blue)' },
-                    { value: 'sunset', label: '3. Sunset (Orange/Purple)' },
-                    { value: 'neon', label: '4. Neon (Gray/Lime)' }
+                    { value: 'rainbow', label: '0. Rainbow' },
+                    { value: 'monochrome', label: '1. Monochrome' },
+                    { value: 'basic', label: '2. Basic (Green/Pink)' },
+                    { value: 'ocean', label: '3. Ocean (Cyan/Blue)' },
+                    { value: 'sunset', label: '4. Sunset (Orange/Purple)' },
+                    { value: 'neon', label: '5. Neon (Gray/Lime)' }
                 ],
                 onChange: (v) => {
                     this.colorTheme = v;
@@ -534,15 +535,23 @@ const SquareMazeCase = {
         ctx.fillRect(0, 0, this.width, this.height);
 
         // 2. Cell Fill Pass (Using floor to avoid anti-aliasing artifacts)
+        const isRainbow = this.colorTheme === 'rainbow';
+        const diag = this.cols + this.rows; // for hue spread
         for (let y = 0; y < this.rows; y++) {
             for (let x = 0; x < this.cols; x++) {
                 const k = `${x},${y}`;
                 const pathIdx = this.pathMap.get(k);
                 let fill = null;
-                if (pathIdx !== undefined && pathIdx < this.pathProgress) fill = theme.path;
-                else if (this.currentNode && this.currentNode.x === x && this.currentNode.y === y) fill = theme.current;
-                else if (this.exploredSet.has(k)) fill = theme.explored;
-                else if (this.frontierSet.has(k)) fill = theme.frontier;
+                if (pathIdx !== undefined && pathIdx < this.pathProgress) {
+                    fill = isRainbow ? 'rgba(220, 210, 255, 0.65)' : theme.path;
+                }
+                else if (this.currentNode && this.currentNode.x === x && this.currentNode.y === y) fill = isRainbow ? '#FFFFFF' : theme.current;
+                else if (this.exploredSet.has(k)) {
+                    fill = isRainbow ? `hsl(${Math.round(((x + y) / diag) * 360)}, 80%, 60%)` : theme.explored;
+                }
+                else if (this.frontierSet.has(k)) {
+                    fill = isRainbow ? `hsl(${Math.round(((x + y) / diag) * 360)}, 90%, 75%)` : theme.frontier;
+                }
                 else if (x === this.startNode.x && y === this.startNode.y) fill = theme.start;
                 else if (x === this.goalNode.x && y === this.goalNode.y) fill = theme.goal;
 
@@ -561,28 +570,50 @@ const SquareMazeCase = {
         // 3. Walls Pass (Tiered: Inner vs Outer)
         
         // A. Inner Walls (Subtle/Thin)
-        ctx.strokeStyle = theme.wall;
-        ctx.globalAlpha = 0.4;
-        ctx.lineWidth = 1.0;
-        ctx.beginPath();
-        for (let y = 0; y < this.rows; y++) {
-            for (let x = 0; x < this.cols; x++) {
-                const cell = this.grid[y][x];
-                const px = ox + x * this.cellSize;
-                const py = oy + y * this.cellSize;
-
-                // Only draw internal lines here
-                if (!(cell.open & N) && y > 0) { ctx.moveTo(px, py); ctx.lineTo(px + this.cellSize, py); }
-                if (!(cell.open & E) && x < this.cols - 1) { ctx.moveTo(px + this.cellSize, py); ctx.lineTo(px + this.cellSize, py + this.cellSize); }
-                if (!(cell.open & S) && y < this.rows - 1) { ctx.moveTo(px, py + this.cellSize); ctx.lineTo(px + this.cellSize, py + this.cellSize); }
-                if (!(cell.open & W) && x > 0) { ctx.moveTo(px, py); ctx.lineTo(px, py + this.cellSize); }
+        if (isRainbow) {
+            // Rainbow: draw each wall segment with its own hue
+            ctx.globalAlpha = 0.6;
+            ctx.lineWidth = 1.0;
+            for (let y = 0; y < this.rows; y++) {
+                for (let x = 0; x < this.cols; x++) {
+                    const cell = this.grid[y][x];
+                    const px = ox + x * this.cellSize;
+                    const py = oy + y * this.cellSize;
+                    const hue = Math.round(((x + y) / diag) * 360);
+                    ctx.strokeStyle = `hsl(${hue}, 80%, 70%)`;
+                    ctx.beginPath();
+                    if (!(cell.open & N) && y > 0) { ctx.moveTo(px, py); ctx.lineTo(px + this.cellSize, py); }
+                    if (!(cell.open & E) && x < this.cols - 1) { ctx.moveTo(px + this.cellSize, py); ctx.lineTo(px + this.cellSize, py + this.cellSize); }
+                    if (!(cell.open & S) && y < this.rows - 1) { ctx.moveTo(px, py + this.cellSize); ctx.lineTo(px + this.cellSize, py + this.cellSize); }
+                    if (!(cell.open & W) && x > 0) { ctx.moveTo(px, py); ctx.lineTo(px, py + this.cellSize); }
+                    ctx.stroke();
+                }
             }
+        } else {
+            ctx.strokeStyle = theme.wall;
+            ctx.globalAlpha = 0.4;
+            ctx.lineWidth = 1.0;
+            ctx.beginPath();
+            for (let y = 0; y < this.rows; y++) {
+                for (let x = 0; x < this.cols; x++) {
+                    const cell = this.grid[y][x];
+                    const px = ox + x * this.cellSize;
+                    const py = oy + y * this.cellSize;
+
+                    // Only draw internal lines here
+                    if (!(cell.open & N) && y > 0) { ctx.moveTo(px, py); ctx.lineTo(px + this.cellSize, py); }
+                    if (!(cell.open & E) && x < this.cols - 1) { ctx.moveTo(px + this.cellSize, py); ctx.lineTo(px + this.cellSize, py + this.cellSize); }
+                    if (!(cell.open & S) && y < this.rows - 1) { ctx.moveTo(px, py + this.cellSize); ctx.lineTo(px + this.cellSize, py + this.cellSize); }
+                    if (!(cell.open & W) && x > 0) { ctx.moveTo(px, py); ctx.lineTo(px, py + this.cellSize); }
+                }
+            }
+            ctx.stroke();
         }
-        ctx.stroke();
 
         // B. Outer Boundary (Strong/Thick)
         ctx.globalAlpha = 1.0;
         ctx.lineWidth = 2.0;
+        ctx.strokeStyle = isRainbow ? 'hsl(200, 80%, 70%)' : theme.wall;
         ctx.beginPath();
         const fullW = this.cols * this.cellSize;
         const fullH = this.rows * this.cellSize;
@@ -603,24 +634,44 @@ const SquareMazeCase = {
 
         // 4. Path Line Overlay
         if (this.path.length > 1 && this.pathProgress > 0) {
-            ctx.beginPath();
-            ctx.strokeStyle = theme.current;
             ctx.lineWidth = Math.max(2.5, this.cellSize * 0.2);
             ctx.lineJoin = 'round';
             ctx.lineCap = 'round';
-            const p0 = this.path[0];
-            ctx.moveTo(
-                ox + p0.x * this.cellSize + this.cellSize * 0.5,
-                oy + p0.y * this.cellSize + this.cellSize * 0.5
-            );
-            for (let i = 1; i < this.pathProgress; i++) {
-                const p = this.path[i];
-                ctx.lineTo(
-                    ox + p.x * this.cellSize + this.cellSize * 0.5,
-                    oy + p.y * this.cellSize + this.cellSize * 0.5
+
+            if (isRainbow) {
+                // Rainbow: bright red path line on white cells
+                ctx.beginPath();
+                ctx.strokeStyle = '#FF0000';
+                const rp0 = this.path[0];
+                ctx.moveTo(
+                    ox + rp0.x * this.cellSize + this.cellSize * 0.5,
+                    oy + rp0.y * this.cellSize + this.cellSize * 0.5
                 );
+                for (let i = 1; i < this.pathProgress; i++) {
+                    const p = this.path[i];
+                    ctx.lineTo(
+                        ox + p.x * this.cellSize + this.cellSize * 0.5,
+                        oy + p.y * this.cellSize + this.cellSize * 0.5
+                    );
+                }
+                ctx.stroke();
+            } else {
+                ctx.beginPath();
+                ctx.strokeStyle = theme.current;
+                const p0 = this.path[0];
+                ctx.moveTo(
+                    ox + p0.x * this.cellSize + this.cellSize * 0.5,
+                    oy + p0.y * this.cellSize + this.cellSize * 0.5
+                );
+                for (let i = 1; i < this.pathProgress; i++) {
+                    const p = this.path[i];
+                    ctx.lineTo(
+                        ox + p.x * this.cellSize + this.cellSize * 0.5,
+                        oy + p.y * this.cellSize + this.cellSize * 0.5
+                    );
+                }
+                ctx.stroke();
             }
-            ctx.stroke();
         }
 
         this.drawScoreboard();

@@ -22,18 +22,18 @@
             <div class="tab" data-case="hex-maze">Hexagon Maze</div>
             <div class="tab" data-case="fibonacci-maze">Fibonacci Maze</div>
             <div class="tab" data-case="circular">Circular Obstacles</div>
-            <div class="tab" data-case="square-maze">Square Maze</div>
+            <div class="tab active" data-case="square-maze">Square Maze</div>
             <div class="tab" data-case="water-maze">Water Flow Maze</div>
             <div class="tab" id="tab-poly" data-case="polygon-maze">Polygon Maze</div>
             <div class="tab" id="tab-sphere" data-case="sphere-maze">Sphere Maze</div>
-            <div class="tab active" id="tab-sphere-face" data-case="sphere-face-maze">Sphere Face Maze</div>
+            <div class="tab" id="tab-sphere-face" data-case="sphere-face-maze">Sphere Face Maze</div>
           </div>
         </div>
       </nav>
 
       <header id="header">
-        <h1 id="main-title">Goldberg Face Maze</h1>
-        <p class="subtitle" id="main-subtitle">Pathfinding by traversing polyhedron faces on a sphere.</p>
+        <h1 id="main-title">Square Grid Maze</h1>
+        <p class="subtitle" id="main-subtitle">Find the shortest path in a rectangular maze.</p>
       </header>
 
       <main class="dashboard-card">
@@ -113,8 +113,8 @@
       });
 
       window.onload = () => {
-        if (typeof SphereFaceMazeCase !== 'undefined') {
-          Core.loadCase(SphereFaceMazeCase, { mode: 'interactive' });
+        if (typeof SquareMazeCase !== 'undefined') {
+          Core.loadCase(SquareMazeCase, { mode: 'interactive' });
         }
       };
     </script>
