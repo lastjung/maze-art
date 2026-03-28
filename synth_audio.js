@@ -19,6 +19,16 @@ class SynthAudio {
         this.bankIndex = 0;
         this.noteIndex = 0;
         this.transposition = 1.0;
+
+        // Auto-initialize on first user interaction to bypass autoplay restrictions
+        const autoInit = () => {
+            if (!this.isInitialized) this.init();
+            if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+            document.removeEventListener('pointerdown', autoInit);
+            document.removeEventListener('keydown', autoInit);
+        };
+        document.addEventListener('pointerdown', autoInit);
+        document.addEventListener('keydown', autoInit);
     }
 
     init() {

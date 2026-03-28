@@ -13,7 +13,7 @@ const HexMazeCase = {
     searchMode: 'astar', // astar | dijkstra | greedy | bfs | dfs
     searchDelayMs: 35,
     sfxEnabled: true,
-    sfxVolume: 0.1,
+    sfxVolume: 0.3,
     audioMode: 'synth',
     // Graph State
     startNode: { q: 0, r: 0 },
@@ -152,6 +152,25 @@ const HexMazeCase = {
             },
             {
                 type: 'select',
+                id: 'hex_sound_engine',
+                label: 'Sound Engine',
+                value: this.audioMode,
+                options: [
+                    { value: 'music', label: 'Default Music' },
+                    { value: 'synth', label: 'Algorithm Synth' }
+                ],
+                onChange: (v) => {
+                    this.audioMode = v;
+                    if (v === 'synth') {
+                        if (window.audioManager) window.audioManager.pause();
+                        if (window.synthAudio) window.synthAudio.init();
+                    } else {
+                        if (window.audioManager) window.audioManager.resume();
+                    }
+                }
+            },
+            {
+                type: 'select',
                 id: 'pf_theme',
                 label: 'Color Theme',
                 value: this.colorTheme,
@@ -196,7 +215,7 @@ const HexMazeCase = {
                 id: 'pf_sfx_volume',
                 label: 'SFX Volume',
                 min: 0,
-                max: 0.3,
+                max: 1.0,
                 step: 0.01,
                 value: this.sfxVolume,
                 onChange: (v) => {

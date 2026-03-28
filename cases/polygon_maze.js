@@ -54,7 +54,7 @@ const PolygonMazeCase = {
         theme: 'ocean',
         speed: 40,
         sfxEnabled: true,
-        sfxVolume: 0.1,
+        sfxVolume: 0.3,
         audioMode: 'synth',
         searchMode: 'astar'
     },
@@ -108,6 +108,25 @@ const PolygonMazeCase = {
             },
             {
                 type: 'select',
+                id: 'pm_sound_engine',
+                label: 'Sound Engine',
+                value: this.config.audioMode,
+                options: [
+                    { value: 'music', label: 'Default Music' },
+                    { value: 'synth', label: 'Algorithm Synth' }
+                ],
+                onChange: (v) => {
+                    this.config.audioMode = v;
+                    if (v === 'synth') {
+                        if (window.audioManager) window.audioManager.pause();
+                        if (window.synthAudio) window.synthAudio.init();
+                    } else {
+                        if (window.audioManager) window.audioManager.resume();
+                    }
+                }
+            },
+            {
+                type: 'select',
                 id: 'pm_theme',
                 label: 'Color Theme',
                 options: [
@@ -145,7 +164,7 @@ const PolygonMazeCase = {
                 id: 'pm_sfx_volume',
                 label: 'SFX Volume',
                 min: 0,
-                max: 0.3,
+                max: 1.0,
                 step: 0.01,
                 value: this.config.sfxVolume,
                 onChange: (v) => { this.config.sfxVolume = v; }

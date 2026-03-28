@@ -29,7 +29,7 @@ const CircularPathfindingCase = {
     searchGoalRef: null,
     audioCtx: null,
     sfxEnabled: true,
-    sfxVolume: 0.1,
+    sfxVolume: 0.3,
     stepSoundTick: 0,
     lastStepSoundAt: 0,
     solutionSpeed: 70,
@@ -1013,11 +1013,31 @@ const CircularPathfindingCase = {
                 }
             },
             {
+                type: 'select',
+                id: 'cp_sound_engine',
+                label: 'Sound Engine',
+                value: this.config.audioMode,
+                options: [
+                    { value: 'music', label: 'Default Music' },
+                    { value: 'synth', label: 'Algorithm Synth' }
+                ],
+                onChange: (v) => {
+                    this.config.audioMode = v;
+                    this.saveSettings();
+                    if (v === 'synth') {
+                        if (window.audioManager) window.audioManager.pause();
+                        if (window.synthAudio) window.synthAudio.init();
+                    } else {
+                        if (window.audioManager) window.audioManager.resume();
+                    }
+                }
+            },
+            {
                 type: 'slider',
                 id: 'cp_sfx',
                 label: 'SFX Volume',
                 min: 0,
-                max: 0.3,
+                max: 1.0,
                 step: 0.01,
                 value: this.sfxVolume,
                 onChange: (v) => {

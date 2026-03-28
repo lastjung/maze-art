@@ -77,7 +77,7 @@ const SphereMazeCase = {
         speed: 30,
         solutionSpeed: 70, // Default path reveal speed
         sfxEnabled: true,
-        sfxVolume: 0.1,
+        sfxVolume: 0.3,
         audioMode: 'music', // New: 'music' or 'synth'
         searchMode: 'astar',
         autoTrack: true
@@ -341,7 +341,7 @@ const SphereMazeCase = {
                 id: 'sm_sfx_volume',
                 label: 'SFX Volume',
                 min: 0,
-                max: 0.3,
+                max: 1.0,
                 step: 0.01,
                 value: this.config.sfxVolume,
                 onChange: (v) => { this.config.sfxVolume = v; }
@@ -620,7 +620,8 @@ const SphereMazeCase = {
                 });
             }
         }
-        if (pts.length > n) return pts.slice(0, n);
+        // Allow the natural points to persist without truncation.
+        // Truncating forces the south pole to vanish.
         while (pts.length < n) {
             const t = pts.length / Math.max(1, n - 1);
             const y = 1 - 2 * t;
@@ -659,7 +660,7 @@ const SphereMazeCase = {
             }
         }
 
-        if (pts.length > n) return pts.slice(0, n);
+        // Allow natural cube generation without truncation
         while (pts.length < n) {
             const t = pts.length / Math.max(1, n - 1);
             const y = 1 - 2 * t;
@@ -1206,111 +1207,44 @@ const SphereMazeCase = {
         const frontierSet = new Set(this.frontier);
         const rotatedSeeds = projected.map(p => p.rot);
 
-        if (isRainbowVivid) {
-            const cacheSize = Math.max(24, Math.ceil(r * 2));
-            if (!this.vividCacheCanvas) {
-                this.vividCacheCanvas = document.createElement('canvas');
-                this.vividCacheCtx = this.vividCacheCanvas.getContext('2d');
-                this.vividCacheDirty = true;
-            }
-            if (this.vividCacheCanvas.width !== cacheSize || this.vividCacheCanvas.height !== cacheSize) {
-                this.vividCacheCanvas.width = cacheSize;
-                this.vividCacheCanvas.height = cacheSize;
-                this.vividCacheDirty = true;
-            }
-
-            this.vividCacheTick += 1;
-            const rotDelta = Math.abs(this.rotX - this.vividCacheRotX) + Math.abs(this.rotY - this.vividCacheRotY);
-            const isRotating = rotDelta > 0.0015;
-            const stride = this.searchInProgress ? 3 : 2;
-            const mustRefresh =
-                this.vividCacheDirty ||
-                this.vividCachePointCount !== this.points.length ||
-                rotDelta > 0.02 ||
-                (isRotating && (this.vividCacheTick % stride === 0));
-
-            if (mustRefresh) {
-                const cacheCtx = this.vividCacheCtx;
-                const size = this.vividCacheCanvas.width;
-                const localR = size / 2;
-                const localCx = localR;
-                const localCy = localR;
-                const step = Math.max(2, Math.round(r * (this.searchInProgress ? 0.016 : 0.012)));
-
-                cacheCtx.clearRect(0, 0, size, size);
-                for (let gy = 0; gy <= size; gy += step) {
-                    for (let gx = 0; gx <= size; gx += step) {
-                        const nx = (gx - localCx) / localR;
-                        const ny = (gy - localCy) / localR;
-                        const rr = nx * nx + ny * ny;
-                        if (rr > 1) continue;
-                        const nz = Math.sqrt(Math.max(0, 1 - rr));
-                        const idx = this.nearestSeedIndex({ x: nx, y: ny, z: nz }, rotatedSeeds);
-                        const alpha = 0.26 + (1 - rr) * 0.28;
-                        cacheCtx.fillStyle = this.vividColorForSeed(idx, alpha);
-                        cacheCtx.fillRect(gx, gy, step, step);
-                    }
-                }
-
-                this.vividCacheRadius = r;
-                this.vividCacheRotX = this.rotX;
-                this.vividCacheRotY = this.rotY;
-                this.vividCachePointCount = this.points.length;
-                this.vividCacheDirty = false;
-            }
-
-            ctx.save();
-            ctx.beginPath();
-            ctx.arc(cx, cy, r, 0, Math.PI * 2);
-            ctx.clip();
-            ctx.drawImage(this.vividCacheCanvas, cx - r, cy - r, r * 2, r * 2);
-            const shade = ctx.createRadialGradient(cx - r * 0.2, cy - r * 0.35, r * 0.18, cx, cy, r * 1.1);
-            shade.addColorStop(0, 'rgba(255,255,255,0.12)');
-            shade.addColorStop(0.45, 'rgba(255,255,255,0.02)');
-            shade.addColorStop(1, 'rgba(0,0,0,0.16)');
-            ctx.fillStyle = shade;
-            ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
-            ctx.restore();
+        // Draw Sphere body with stronger contrast against dark background.
+        const grad = ctx.createRadialGradient(
+            cx - r * 0.22,
+            cy - r * 0.28,
+            r * 0.08,
+            cx,
+            cy,
+            r
+        );
+        if (this.config.theme === 'rainbow' || this.config.theme === 'rainbow-vivid') {
+            grad.addColorStop(0, 'rgba(40, 40, 40, 1.0)');
+            grad.addColorStop(0.55, 'rgba(20, 20, 20, 1.0)');
+            grad.addColorStop(1, 'rgba(0, 0, 0, 1.0)');
+        } else if (this.config.theme === 'basic') {
+            grad.addColorStop(0, 'rgba(120, 255, 150, 0.85)'); // Bright minty center
+            grad.addColorStop(0.55, 'rgba(40, 200, 80, 0.8)');   // Vibrant middle green
+            grad.addColorStop(1, 'rgba(10, 100, 30, 0.8)');      // Clean dark green edge
+        } else if (this.config.theme === 'ocean') {
+            grad.addColorStop(0, 'rgba(80, 200, 230, 0.85)');    // Bright soft cyan top
+            grad.addColorStop(0.55, 'rgba(40, 150, 180, 0.8)');  // Medium teal
+            grad.addColorStop(1, 'rgba(10, 80, 110, 0.8)');      // Distinct dark cyan edge
+        } else if (this.config.theme === 'sunset') {
+            grad.addColorStop(0, 'rgba(255, 200, 150, 0.85)');
+            grad.addColorStop(0.55, 'rgba(255, 120, 60, 0.8)');
+            grad.addColorStop(1, 'rgba(120, 20, 80, 0.8)');
+        } else if (this.config.theme === 'neon') {
+            grad.addColorStop(0, 'rgba(160, 160, 160, 0.85)');
+            grad.addColorStop(0.55, 'rgba(80, 80, 80, 0.8)');
+            grad.addColorStop(1, 'rgba(20, 20, 20, 0.8)');
         } else {
-            // Draw Sphere body with stronger contrast against dark background.
-            const grad = ctx.createRadialGradient(
-                cx - r * 0.22,
-                cy - r * 0.28,
-                r * 0.08,
-                cx,
-                cy,
-                r
-            );
-            if (this.config.theme === 'rainbow') {
-                grad.addColorStop(0, 'rgba(255, 255, 255, 0.85)');
-                grad.addColorStop(0.55, 'rgba(180, 180, 180, 0.8)');
-                grad.addColorStop(1, 'rgba(60, 60, 60, 0.8)');
-            } else if (this.config.theme === 'basic') {
-                grad.addColorStop(0, 'rgba(120, 255, 150, 0.85)'); // Bright minty center
-                grad.addColorStop(0.55, 'rgba(40, 200, 80, 0.8)');   // Vibrant middle green
-                grad.addColorStop(1, 'rgba(10, 100, 30, 0.8)');      // Clean dark green edge
-            } else if (this.config.theme === 'ocean') {
-                grad.addColorStop(0, 'rgba(80, 200, 230, 0.85)');    // Bright soft cyan top
-                grad.addColorStop(0.55, 'rgba(40, 150, 180, 0.8)');  // Medium teal
-                grad.addColorStop(1, 'rgba(10, 80, 110, 0.8)');      // Distinct dark cyan edge
-            } else if (this.config.theme === 'sunset') {
-                grad.addColorStop(0, 'rgba(255, 200, 150, 0.85)');
-                grad.addColorStop(0.55, 'rgba(255, 120, 60, 0.8)');
-                grad.addColorStop(1, 'rgba(120, 20, 80, 0.8)');
-            } else if (this.config.theme === 'neon') {
-                grad.addColorStop(0, 'rgba(160, 160, 160, 0.85)');
-                grad.addColorStop(0.55, 'rgba(80, 80, 80, 0.8)');
-                grad.addColorStop(1, 'rgba(20, 20, 20, 0.8)');
-            } else {
-                grad.addColorStop(0, 'rgba(200, 200, 200, 0.85)');
-                grad.addColorStop(0.55, 'rgba(100, 100, 100, 0.8)');
-                grad.addColorStop(1, 'rgba(40, 40, 40, 0.8)');
-            }
-            ctx.fillStyle = grad;
-            ctx.beginPath();
-            ctx.arc(cx, cy, r, 0, Math.PI * 2);
-            ctx.fill();
+            grad.addColorStop(0, 'rgba(200, 200, 200, 0.85)');
+            grad.addColorStop(0.55, 'rgba(100, 100, 100, 0.8)');
+            grad.addColorStop(1, 'rgba(40, 40, 40, 0.8)');
         }
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.fill();
 
         // 1. Draw Edges (Layered)
         ctx.lineCap = 'round';
@@ -1335,12 +1269,13 @@ const SphereMazeCase = {
                 ctx.globalAlpha = alpha;
 
                 if (isVoronoi) {
-                    ctx.strokeStyle = isRainbowVivid ? 'rgba(255, 255, 255, 0.55)' : 'rgba(255, 255, 255, 0.95)';
+            const useRainbow = this.config.theme === 'rainbow' || this.config.theme === 'rainbow-vivid';
+                    ctx.strokeStyle = useRainbow ? this.vividColorForSeed(i, 1.0) : 'rgba(255, 255, 255, 0.95)';
                     ctx.lineWidth = 1.25;
                     ctx.globalAlpha = Math.min(1, alpha * 0.95);
                 } else {
-                    // Unvisited Open Path
-                    ctx.strokeStyle = !isRainbowVivid ? 'rgba(255, 255, 255, 0.85)' : 'rgba(255, 255, 255, 0.35)';
+                    const useRainbow = this.config.theme === 'rainbow' || this.config.theme === 'rainbow-vivid';
+                    ctx.strokeStyle = useRainbow ? this.vividColorForSeed(i, 1.0) : 'rgba(255, 255, 255, 0.45)';
                     ctx.lineWidth = 1.0;
                 }
 
@@ -1352,6 +1287,7 @@ const SphereMazeCase = {
         
         // Layer 2: Search Tree (Explored Edges from parentMap)
         ctx.globalAlpha = 1.0;
+        const useRainbowTree = this.config.theme === 'rainbow' || this.config.theme === 'rainbow-vivid';
         this.parentMap.forEach((parentIdx, childIdx) => {
             if (parentIdx === null) return;
             const p1 = projected[childIdx];
@@ -1360,7 +1296,7 @@ const SphereMazeCase = {
             if (avgZ < -0.2) return; // Occlusion
 
             ctx.beginPath();
-            ctx.strokeStyle = renderTheme.explored;
+            ctx.strokeStyle = useRainbowTree ? '#FFFFFF' : renderTheme.explored;
             ctx.lineWidth = 1.5;
             // Depth-based opacity for search tree
             ctx.globalAlpha = Math.min(1.0, avgZ + 0.8);
@@ -1408,7 +1344,7 @@ const SphereMazeCase = {
             const pathIdx = this.path.indexOf(p.idx);
             if (pathIdx !== -1 && pathIdx < this.pathProgress) fill = renderTheme.path;
             else if (p.idx === this.currentIdx) fill = renderTheme.current;
-            else if (this.explored.has(p.idx)) fill = renderTheme.explored;
+            else if (this.explored.has(p.idx)) fill = useRainbowTree ? '#FFFFFF' : renderTheme.explored;
             else if (frontierSet.has(p.idx)) fill = renderTheme.frontier;
 
             if (fill) {
