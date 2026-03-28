@@ -55,6 +55,7 @@ const PolygonMazeCase = {
         speed: 40,
         sfxEnabled: true,
         sfxVolume: 0.1,
+        audioMode: 'synth',
         searchMode: 'astar'
     },
     mazeShape: 'random',
@@ -575,6 +576,7 @@ const PolygonMazeCase = {
     },
 
     clearSearchState() {
+        if (window.synthAudio) window.synthAudio.randomizeMelody();
         this.frontier = [];
         this.explored.clear();
         this.parentMap.clear();
@@ -704,9 +706,21 @@ const PolygonMazeCase = {
         }
 
         // Sound
-        const dist = Math.sqrt((this.points[current].x - this.points[goal].x)**2 + (this.points[current].y - this.points[goal].y)**2);
-        const freq = 200 + (1 - dist / this.width) * 800;
-        MazeEngine.playTone(freq, 0.05, 'sine', 0.1, 0.003, this.config);
+        if (this.config.audioMode === 'synth' && window.synthAudio) {
+            const stepDelayMs = MazeEngine.speedToDelay(this.config.speed);
+            const durationSec = Math.max(0.05, stepDelayMs / 1000.0);
+            const pt = { 
+                x: (this.points[current].x / this.width) * 2 - 1, 
+                y: 0, 
+                z: 0 
+            };
+            // Default sfx volume to 0.1 if not strictly defined in config
+            window.synthAudio.triggerNote(pt, 0, 0, this.config.sfxVolume || 0.1, durationSec);
+        } else {
+            const dist = Math.sqrt((this.points[current].x - this.points[goal].x)**2 + (this.points[current].y - this.points[goal].y)**2);
+            const freq = 200 + (1 - dist / this.width) * 800;
+            MazeEngine.playTone(freq, 0.05, 'sine', 0.1, 0.003, this.config);
+        }
 
         const neighbors = this.neighbors[current].filter(n => {
             const edgeKey = current < n ? `${current}-${n}` : `${n}-${current}`;

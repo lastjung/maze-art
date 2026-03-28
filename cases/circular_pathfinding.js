@@ -49,7 +49,8 @@ const CircularPathfindingCase = {
         showHugging: true,
         actorRadius: 10, // Minkowski expansion
         searchSpeedMs: 24,
-        solutionSpeed: 70
+        solutionSpeed: 70,
+        audioMode: 'synth'
     },
 
     init() {
@@ -307,6 +308,7 @@ const CircularPathfindingCase = {
     },
 
     clearSearchVisuals() {
+        if (window.synthAudio) window.synthAudio.randomizeMelody();
         this.path = [];
         this.searchFrontier = [];
         this.searchBestDist = new Map();
@@ -359,9 +361,21 @@ const CircularPathfindingCase = {
         if (now - this.lastStepSoundAt < 45) return;
         this.lastStepSoundAt = now;
         this.stepSoundTick += 1;
-        if (this.stepSoundTick % 2 !== 0) return;
-        const pitch = 220 + (this.stepSoundTick % 8) * 20;
-        this.playTone(pitch, 0.045, 'triangle', 0.45);
+
+        if (this.config.audioMode === 'synth' && window.synthAudio && this.currentSearchNode) {
+            const stepDelayMs = this.config.searchSpeedMs;
+            const durationSec = Math.max(0.05, stepDelayMs / 1000.0);
+            const pt = { 
+                x: (this.currentSearchNode.x / this.width) * 2 - 1, 
+                y: 0, 
+                z: 0 
+            };
+            window.synthAudio.triggerNote(pt, 0, 0, this.sfxVolume, durationSec);
+        } else {
+            if (this.stepSoundTick % 2 !== 0) return;
+            const pitch = 220 + (this.stepSoundTick % 8) * 20;
+            this.playTone(pitch, 0.045, 'triangle', 0.45);
+        }
     },
 
     playResultSound(found) {

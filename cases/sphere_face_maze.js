@@ -1216,6 +1216,7 @@ const SphereFaceMazeCase = {
     },
 
     clearSearchState() {
+        if (window.synthAudio) window.synthAudio.randomizeMelody();
         this.frontier = [];
         this.explored.clear();
         this.parentMap.clear();
@@ -1343,9 +1344,15 @@ const SphereFaceMazeCase = {
         }
 
         // Sound
-        const dist = Math.sqrt((this.points[current].x - this.points[goal].x)**2 + (this.points[current].y - this.points[goal].y)**2 + (this.points[current].z - this.points[goal].z)**2);
-        const freq = 300 + (1 - dist / 2) * 700;
-        MazeEngine.playTone(freq, 0.05, 'sine', 0.1, 0.003, this.config);
+        if (this.config.audioMode === 'synth' && window.synthAudio) {
+            const stepDelayMs = MazeEngine.speedToDelay(this.config.speed);
+            const durationSec = Math.max(0.05, stepDelayMs / 1000.0);
+            window.synthAudio.triggerNote(this.points[current], this.rotX, this.rotY, this.config.sfxVolume, durationSec);
+        } else {
+            const dist = Math.sqrt((this.points[current].x - this.points[goal].x)**2 + (this.points[current].y - this.points[goal].y)**2 + (this.points[current].z - this.points[goal].z)**2);
+            const freq = 300 + (1 - dist / 2) * 700;
+            MazeEngine.playTone(freq, 0.05, 'sine', 0.1, 0.003, this.config);
+        }
 
         const neighbors = this.neighbors[current].filter(n => {
             return !this.walls.has(n);
@@ -1615,25 +1622,13 @@ const SphereFaceMazeCase = {
             ctx.fillStyle = fillStyle;
             ctx.fill();
 
-            ctx.globalAlpha = Math.max(0.3, depthAlpha * 0.5);
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)'; // Bright white for visibility
-            ctx.lineWidth = 0.8;
+            ctx.globalAlpha = Math.max(0.1, depthAlpha * 0.2);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)'; // Fainter boundaries
+            ctx.lineWidth = 0.5;
             ctx.stroke();
 
-            // VISUAL DEBUG: Draw '1' only for road cells.
-            if (center && cell.avgZ > -0.55) {
-                const isWall = this.walls.has(cell.idx);
-                if (isWall) {
-                    // Hide wall label ('0') per request.
-                } else {
-                ctx.globalAlpha = 1.0;
-                ctx.fillStyle = '#FF5555'; // Road: Red
-                ctx.font = 'bold 10px Arial';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText('1', center.x, center.y);
-                }
-            }
+            // VISUAL DEBUG labels removed.
+            // (Lines 1623-1636 removed)
 
             // Preserve clear start/goal anchors.
             if ((cell.idx === this.startNodeIdx || cell.idx === this.goalNodeIdx) && center && center.z > -0.3) {

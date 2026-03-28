@@ -24,6 +24,7 @@ const FibonacciMazeCase = {
     searchDelayMs: 20, // corresponding to speed 40 -> 100 - 40*2 = 20
     sfxEnabled: true,
     sfxVolume: 0.1,
+    audioMode: 'synth',
 
     // Graph State
     startNode: { q: 0, r: 0 },
@@ -270,12 +271,24 @@ const FibonacciMazeCase = {
         this.lastStepSoundAt = now;
         this.stepSoundTick += 1;
 
-        if (this.stepSoundTick % 2 !== 0) return;
-        const pitch = 240 + (this.stepSoundTick % 10) * 18;
-        MazeEngine.playTone(pitch, 0.05, 'triangle', 0.45, 0.003, this);
+        if (this.audioMode === 'synth' && window.synthAudio && this.currentNode) {
+            const stepDelayMs = this.searchDelayMs;
+            const durationSec = Math.max(0.05, stepDelayMs / 1000.0);
+            const pt = { 
+                x: (this.currentNode.q / this.gridRadius), 
+                y: 0, 
+                z: 0 
+            };
+            window.synthAudio.triggerNote(pt, 0, 0, this.sfxVolume, durationSec);
+        } else {
+            if (this.stepSoundTick % 2 !== 0) return;
+            const pitch = 240 + (this.stepSoundTick % 10) * 18;
+            MazeEngine.playTone(pitch, 0.05, 'triangle', 0.45, 0.003, this);
+        }
     },
 
     clearSearchState() {
+        if (window.synthAudio) window.synthAudio.randomizeMelody();
         this.stopSearchAnimation();
         this.cameFrom = {};
         this.costSoFar = {};

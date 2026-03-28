@@ -78,6 +78,7 @@ const SphereMazeCase = {
         solutionSpeed: 70, // Default path reveal speed
         sfxEnabled: true,
         sfxVolume: 0.1,
+        audioMode: 'music', // New: 'music' or 'synth'
         searchMode: 'astar',
         autoTrack: true
     },
@@ -280,6 +281,25 @@ const SphereMazeCase = {
                     { value: 'dfs', label: 'DFS' }
                 ],
                 onChange: (v) => { this.config.searchMode = v; this.triggerSearch(); }
+            },
+            {
+                type: 'select',
+                id: 'sm_sound_engine',
+                label: 'Sound Engine',
+                value: this.config.audioMode,
+                options: [
+                    { value: 'music', label: 'Default Music' },
+                    { value: 'synth', label: 'Algorithm Synth' }
+                ],
+                onChange: (v) => {
+                    this.config.audioMode = v;
+                    if (v === 'synth') {
+                        if (window.audioManager) window.audioManager.pause();
+                        if (window.synthAudio) window.synthAudio.init();
+                    } else {
+                        if (window.audioManager) window.audioManager.resume();
+                    }
+                }
             },
             {
                 type: 'select',
@@ -855,6 +875,7 @@ const SphereMazeCase = {
     },
 
     clearSearchState() {
+        if (window.synthAudio) window.synthAudio.randomizeMelody();
         this.frontier = [];
         this.explored.clear();
         this.parentMap.clear();
@@ -982,9 +1003,16 @@ const SphereMazeCase = {
         }
 
         // Sound
-        const dist = Math.sqrt((this.points[current].x - this.points[goal].x)**2 + (this.points[current].y - this.points[goal].y)**2 + (this.points[current].z - this.points[goal].z)**2);
-        const freq = 300 + (1 - dist / 2) * 700;
-        MazeEngine.playTone(freq, 0.05, 'sine', 0.1, 0.003, this.config);
+        if (this.config.audioMode === 'synth' && window.synthAudio) {
+            // Synchronize sound duration with visual speed delay
+            const stepDelayMs = MazeEngine.speedToDelay(this.config.speed);
+            const durationSec = Math.max(0.05, stepDelayMs / 1000.0);
+            window.synthAudio.triggerNote(this.points[current], this.rotX, this.rotY, this.config.sfxVolume, durationSec);
+        } else {
+            const dist = Math.sqrt((this.points[current].x - this.points[goal].x)**2 + (this.points[current].y - this.points[goal].y)**2 + (this.points[current].z - this.points[goal].z)**2);
+            const freq = 300 + (1 - dist / 2) * 700;
+            MazeEngine.playTone(freq, 0.05, 'sine', 0.1, 0.003, this.config);
+        }
 
         const neighbors = this.neighbors[current].filter(n => {
             const edgeKey = current < n ? `${current}-${n}` : `${n}-${current}`;
@@ -1287,13 +1315,17 @@ const SphereMazeCase = {
         // 1. Draw Edges (Layered)
         ctx.lineCap = 'round';
         
-        // Layer 1: All Edges (Walls and Unvisited Open Paths)
+        // Layer 1: Maze Paths (Only Open Edges)
         for (let i = 0; i < this.points.length; i++) {
             const p1 = projected[i];
             this.neighbors[i].forEach(nIdx => {
                 if (i > nIdx) return;
                 const edgeKey = i < nIdx ? `${i}-${nIdx}` : `${nIdx}-${i}`;
                 const isOpen = this.openEdges.has(edgeKey);
+                
+                // If it's not an open path, don't draw it.
+                if (!isOpen) return;
+
                 const p2 = projected[nIdx];
                 const avgZ = (p1.z + p2.z) / 2;
                 if (avgZ < -0.4) return; // Occlusion
@@ -1303,25 +1335,13 @@ const SphereMazeCase = {
                 ctx.globalAlpha = alpha;
 
                 if (isVoronoi) {
-                    // Voronoi mode: emphasize cell-like network readability.
-                    if (isOpen) {
-                        ctx.strokeStyle = isRainbowVivid ? 'rgba(255, 255, 255, 0.55)' : 'rgba(255, 255, 255, 0.95)';
-                        ctx.lineWidth = 1.25;
-                        ctx.globalAlpha = Math.min(1, alpha * 0.95);
-                    } else {
-                        ctx.strokeStyle = isRainbowVivid ? 'rgba(130, 180, 255, 0.45)' : 'rgba(120, 170, 255, 0.72)';
-                        ctx.lineWidth = 0.95;
-                        ctx.globalAlpha = Math.max(0.14, alpha * 0.62);
-                    }
-                } else if (isOpen) {
-                    // Unvisited Open Path - Subtle and thinner to reduce noise during rotation
-                    ctx.strokeStyle = !isRainbowVivid ? 'rgba(255, 255, 255, 0.9)' : 'rgba(255, 255, 255, 0.3)';
-                    ctx.lineWidth = 1.0;
+                    ctx.strokeStyle = isRainbowVivid ? 'rgba(255, 255, 255, 0.55)' : 'rgba(255, 255, 255, 0.95)';
+                    ctx.lineWidth = 1.25;
+                    ctx.globalAlpha = Math.min(1, alpha * 0.95);
                 } else {
-                    // Wall
-                    ctx.strokeStyle = !isRainbowVivid ? 'rgba(255, 255, 255, 0.5)' : renderTheme.wall;
-                    ctx.lineWidth = 0.8;
-                    ctx.globalAlpha = !isRainbowVivid ? alpha * 0.4 : alpha * 0.2; // Walls are very subtle
+                    // Unvisited Open Path
+                    ctx.strokeStyle = !isRainbowVivid ? 'rgba(255, 255, 255, 0.85)' : 'rgba(255, 255, 255, 0.35)';
+                    ctx.lineWidth = 1.0;
                 }
 
                 ctx.moveTo(p1.x, p1.y);

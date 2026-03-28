@@ -18,6 +18,7 @@ const SquareMazeCase = {
     gridShape: 'square',
     sfxEnabled: true,
     sfxVolume: 0.1,
+    audioMode: 'synth', // New mode added
 
     grid: [],
     startNode: { x: 0, y: 0 },
@@ -297,6 +298,7 @@ const SquareMazeCase = {
     },
 
     clearSearchState() {
+        if (window.synthAudio) window.synthAudio.randomizeMelody();
         this.stopSearchAnimation();
         this.frontierPQ = null;
         this.frontierQueue = null;
@@ -375,9 +377,22 @@ const SquareMazeCase = {
         if (now - this.lastStepSoundAt < 40) return;
         this.lastStepSoundAt = now;
         this.stepSoundTick += 1;
-        if (this.stepSoundTick % 2 !== 0) return;
-        const pitch = 220 + (this.stepSoundTick % 10) * 16;
-        MazeEngine.playTone(pitch, 0.05, 'triangle', 0.45, 0.003, this);
+        
+        // For standard tone, we used to skip ticks. But for synth melody, we play every step (or scaled).
+        if (this.audioMode === 'synth' && window.synthAudio && this.currentNode) {
+            const stepDelayMs = this.searchDelayMs;
+            const durationSec = Math.max(0.05, stepDelayMs / 1000.0);
+            const pt = { 
+                x: (this.currentNode.x / this.cols) * 2 - 1, 
+                y: 0, 
+                z: 0 
+            };
+            window.synthAudio.triggerNote(pt, 0, 0, this.sfxVolume, durationSec);
+        } else {
+            if (this.stepSoundTick % 2 !== 0) return;
+            const pitch = 220 + (this.stepSoundTick % 10) * 16;
+            MazeEngine.playTone(pitch, 0.05, 'triangle', 0.45, 0.003, this);
+        }
     },
 
     finishSearch(found) {
@@ -707,17 +722,17 @@ const SquareMazeCase = {
         const algorithmLabel = algorithmNames[this.searchMode] || this.searchMode;
 
         ctx.save();
-        const margin = 26;
+        const margin = 10;
         ctx.textAlign = 'right';
         ctx.fillStyle = '#FFFFFF';
-        ctx.font = '600 13px Inter, system-ui, sans-serif';
-        ctx.fillText(`Algorithm: ${algorithmLabel}`, this.width - margin, 36);
+        ctx.font = '600 12px Inter, system-ui, sans-serif';
+        ctx.fillText(`Algorithm: ${algorithmLabel}`, this.width - margin, 30);
 
-        ctx.font = '500 12px Inter, system-ui, sans-serif';
+        ctx.font = '500 11px Inter, system-ui, sans-serif';
         ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-        ctx.fillText(`Time: ${timeLabel}`, this.width - margin, 58);
-        ctx.fillText(`Cells Entered: ${enteredNow}`, this.width - margin, 78);
-        ctx.fillText(`Last: ${this.lastEnteredCellCount}`, this.width - margin, 98);
+        ctx.fillText(`Time: ${timeLabel}`, this.width - margin, 48);
+        ctx.fillText(`Cells Entered: ${enteredNow}`, this.width - margin, 64);
+        ctx.fillText(`Last: ${this.lastEnteredCellCount}`, this.width - margin, 80);
         ctx.restore();
     },
 
