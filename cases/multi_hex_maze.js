@@ -20,7 +20,7 @@ class HexInstance {
         this.solutionSpeed = 70;
         this.sfxEnabled = true;
         this.sfxVolume = 0.5;
-        this.audioMode = 'synth';
+        this.audioMode = 'music';
 
         this.startNode = { q: 0, r: 0 };
         this.goalNode = { q: 0, r: 0 };
@@ -217,7 +217,7 @@ const MultiHexMazeCase = {
             if (i < defaults.length) {
                 c.searchMode = defaults[i].mode;
                 c.colorTheme = defaults[i].theme;
-                c.audioMode = c.audioMode || 'synth';
+                c.audioMode = c.audioMode || 'music';
             }
         });
 
