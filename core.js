@@ -11,6 +11,9 @@ const Core = {
     isRecordingMode: false,
     isRunning: false,
     currentCaseMode: 'display',
+    get isAudioEnabled() {
+        return window.audioManager && !window.audioManager.isMuted;
+    },
 
     init() {
         this.setupUI();
@@ -59,15 +62,6 @@ const Core = {
         }
         this.syncAudioButton();
 
-        // 3. UI Toggle Button (for bringing UI back)
-        if (!document.getElementById('ui-toggle-btn')) {
-             const btn = document.createElement('button');
-             btn.id = 'ui-toggle-btn';
-             btn.textContent = 'Exit Full Screen';
-             btn.title = 'Exit Full Screen';
-             btn.onclick = () => this.toggleCinematicMode();
-             document.body.appendChild(btn);
-        }
         this.updateCinematicButton();
         
         // 4. Hamburger Menu Logic
@@ -328,13 +322,9 @@ const Core = {
     updateCinematicButton() {
         const isHidden = document.body.classList.contains('hide-ui');
         const dockBtn = document.getElementById('btn-hide-ui');
-        const exitBtn = document.getElementById('ui-toggle-btn');
         if (dockBtn) {
             dockBtn.textContent = isHidden ? '⤡' : '⤢';
             dockBtn.title = isHidden ? 'Exit Full Screen' : 'Enter Full Screen';
-        }
-        if (exitBtn) {
-            exitBtn.style.display = isHidden ? 'block' : 'none';
         }
     },
 

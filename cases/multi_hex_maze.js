@@ -20,6 +20,7 @@ class HexInstance {
         this.solutionSpeed = 70;
         this.sfxEnabled = true;
         this.sfxVolume = 0.5;
+        this.audioMode = 'synth';
 
         this.startNode = { q: 0, r: 0 };
         this.goalNode = { q: 0, r: 0 };
@@ -54,18 +55,37 @@ class HexInstance {
     step() {
         if (!this.searchInProgress || this.searchPaused) return;
         if (!this.frontier || this.frontier.length === 0) { this.finish(false); return; }
+        
         let current = null;
         if (this.searchMode === 'bfs') current = this.frontier.shift();
         else if (this.searchMode === 'dfs') current = this.frontier.pop();
-        else { this.frontier.sort((a,b) => a.priority - b.priority); current = this.frontier.shift().node; }
+        else {
+            let bestIdx = 0;
+            for(let i=1; i<this.frontier.length; i++) {
+                if (this.frontier[i].priority < this.frontier[bestIdx].priority) bestIdx = i;
+                else if (this.frontier[i].priority === this.frontier[bestIdx].priority) {
+                    if (this.frontier[i].h < this.frontier[bestIdx].h) bestIdx = i;
+                }
+            }
+            current = this.frontier.splice(bestIdx, 1)[0].node;
+        }
         this.currentNode = current;
         const ck = MazeEngine.key(current);
         this.frontierSet.delete(ck); this.exploredSet.add(ck);
         this.searchElapsedMs = performance.now() - this.searchStartedAtMs;
 
-        if (this.sfxEnabled && this.sfxVolume > 0 && (typeof Core === 'undefined' || Core.isAudioEnabled !== false)) {
-            const freq = 150 + (this.exploredSet.size % 80) * 10;
-            MazeEngine.playTone(freq, 0.04, 'sine', 0.1 * this.sfxVolume, 0.003, this);
+        if (this.sfxEnabled && this.sfxVolume > 0 && typeof Core !== 'undefined' && Core.isAudioEnabled !== false) {
+            const idx = parseInt(this.id.split(' ')[1]) - 1 || 0;
+            const pan = (this.offsetX < this.ctx.canvas.width / 3) ? -0.5 : (this.offsetX > this.ctx.canvas.width / 2) ? 0.5 : 0;
+            
+            if (window.synthAudio && this.audioMode === 'synth') {
+                const pt = { x: (this.currentNode ? this.currentNode.q / this.gridRadius : pan), y: 0, z: 0 };
+                window.synthAudio.triggerNote(pt, 0, 0, this.sfxVolume * 0.2, 0.15);
+            } else {
+                const baseFreq = 200 + (idx * 100);
+                const freq = baseFreq + (this.exploredSet.size % 40) * 12;
+                MazeEngine.playTone(freq, 0.05, 'triangle', 0.15 * this.sfxVolume, 0.003, this, pan);
+            }
         }
 
         if (current.q === this.goalNode.q && current.r === this.goalNode.r) { this.finish(true); return; }
@@ -75,13 +95,18 @@ class HexInstance {
             const newCost = (this.costSoFar[ck] || 0) + 1;
             if (this.costSoFar[nk] === undefined || newCost < this.costSoFar[nk]) {
                 this.costSoFar[nk] = newCost; this.cameFrom[nk] = current;
+                const h = MazeEngine.heuristic(this.goalNode, next);
                 let prio = newCost;
-                if (this.searchMode === 'astar') prio += MazeEngine.heuristic(this.goalNode, next);
-                else if (this.searchMode === 'greedy') prio = MazeEngine.heuristic(this.goalNode, next);
+                if (this.searchMode === 'astar') prio = newCost + h * 1.1; 
+                else if (this.searchMode === 'greedy') prio = h;
+                
                 if (!this.frontierSet.has(nk)) {
                     if (this.searchMode === 'bfs' || this.searchMode === 'dfs') this.frontier.push(next);
-                    else this.frontier.push({ node: next, priority: prio });
+                    else this.frontier.push({ node: next, priority: prio, h: h });
                     this.frontierSet.add(nk);
+                } else if (this.searchMode !== 'bfs' && this.searchMode !== 'dfs') {
+                    const existing = this.frontier.find(f => f.node.q === next.q && f.node.r === next.r);
+                    if (existing && prio < existing.priority) { existing.priority = prio; existing.h = h; }
                 }
             }
         }
@@ -100,26 +125,20 @@ class HexInstance {
             this.pathSet = new Set(this.pathMap.keys());
             if (canPlay) MazeEngine.playResultSound(true, this);
             this.animatePath();
-        } else {
-            if (canPlay) MazeEngine.playResultSound(false, this);
-        }
+        } else if (canPlay) MazeEngine.playResultSound(false, this);
         if (this.onRefresh) this.onRefresh();
         if (typeof Core !== 'undefined') Core.syncPlayButton();
     }
 
     animatePath() {
-        if (this.pathProgress >= this.path.length) {
-            MazeEngine.playSolutionFinishSound(this);
-            return;
-        }
+        if (this.pathProgress >= this.path.length) { MazeEngine.playSolutionFinishSound(this); return; }
         this.pathProgress += Math.max(0.5, this.solutionSpeed / 40);
         if (this.onRefresh) this.onRefresh();
         this.pathAnimTimer = setTimeout(() => this.animatePath(), 16);
     }
 
     formatMs(ms) {
-        const v = Math.max(0, ms || 0) / 1000;
-        return v.toFixed(2) + 's';
+        return (Math.max(0, ms || 0) / 1000).toFixed(2) + 's';
     }
 
     drawScoreboard() {
@@ -139,8 +158,15 @@ class HexInstance {
 
     render() {
         if (!this.active) return;
-        const ctx = this.ctx; ctx.save(); ctx.translate(this.offsetX, this.offsetY);
-        ctx.save(); ctx.translate(this.viewWidth / 2, this.viewHeight / 2);
+        const ctx = this.ctx; ctx.save();
+        ctx.beginPath(); ctx.rect(this.offsetX, this.offsetY, this.viewWidth, this.viewHeight); ctx.clip();
+        ctx.translate(this.offsetX, this.offsetY);
+        ctx.save();
+        const mazeWidth = (2 * this.gridRadius + 1) * this.hexSize * MazeEngine.sqrt3;
+        const mazeHeight = (1.5 * this.gridRadius + 1) * this.hexSize * 2;
+        const scale = Math.min(1.0, (this.viewWidth * 0.85) / mazeWidth, (this.viewHeight * 0.85) / mazeHeight);
+        ctx.translate(this.viewWidth / 2, this.viewHeight / 2);
+        ctx.scale(scale, scale);
         const theme = MazeEngine.themes[this.colorTheme] || MazeEngine.themes.basic;
         const time = performance.now() / 1000;
         MazeEngine.forEachHex(this.gridRadius, h => {
@@ -172,111 +198,78 @@ const MultiHexMazeCase = {
 
     init() {
         this.canvas = document.getElementById('mathCanvas'); this.ctx = this.canvas.getContext('2d');
+        const defaults = [
+            { mode: 'astar', theme: 'basic' },
+            { mode: 'dijkstra', theme: 'ocean' },
+            { mode: 'bfs', theme: 'sunset' },
+            { mode: 'dfs', theme: 'neon' }
+        ];
+
         if (this.components.length === 0) {
             for(let i=0; i<4; i++) {
                 const c = new HexInstance({ canvas: this.canvas, ctx: this.ctx, id: `Hex ${i+1}` });
-                c.active = (i === 0); c.onRefresh = () => this.draw();
-                this.generateSharedMaze(c); this.components.push(c);
+                c.active = true; c.onRefresh = () => this.draw();
+                this.components.push(c);
             }
+        }
+        
+        this.components.forEach((c, i) => {
+            if (i < defaults.length) {
+                c.searchMode = defaults[i].mode;
+                c.colorTheme = defaults[i].theme;
+                c.audioMode = c.audioMode || 'synth';
+            }
+        });
+
+        if (this.components[0]) {
+            const master = this.components[0];
+            this.generateSharedMaze(master); 
+            this.components.forEach(c => {
+                c.walls = new Set(master.walls);
+                c.startNode = { ...master.startNode };
+                c.goalNode = { ...master.goalNode };
+                c.gridRadius = master.gridRadius;
+                c.hexSize = master.hexSize;
+                c.mazeShape = master.mazeShape;
+                c.resetSearch();
+            });
         }
         this.resize(); this.bind();
         if (typeof Core !== 'undefined') { Core.syncPlayButton(); Core.updateControls(); }
     },
 
     get uiConfig() {
-        const config = [
-            {
-                type: 'button-group',
-                buttons: [
-                    { 
-                        id: 'btn_go', 
-                        label: (this.searchInProgress && !this.searchPaused) ? 'Hold' : (this.searchPaused ? 'Resume' : 'Go'),
-                        onClick: () => { Core.togglePlay(); } 
-                    },
-                    { id: 'btn_reset', label: 'Reset', onClick: () => { Core.resetCase(); } },
-                    { 
-                        id: 'btn_sound', 
-                        label: (typeof Core !== 'undefined' && Core.isAudioEnabled) ? 'Sound ON' : 'Sound OFF',
-                        onClick: () => { Core.toggleAudio(); } 
-                    }
-                ]
-            }
-        ];
+        const config = [{
+            type: 'button-group',
+            buttons: [
+                { id: 'btn_go', label: (this.searchInProgress && !this.searchPaused) ? 'Hold' : (this.searchPaused ? 'Resume' : 'Go'), onClick: () => { Core.togglePlay(); } },
+                { id: 'btn_reset', label: 'Reset', onClick: () => { Core.resetCase(); } },
+                { id: 'btn_sound', label: (typeof Core !== 'undefined' && Core.isAudioEnabled) ? 'Sound ON' : 'Sound OFF', onClick: () => { Core.toggleAudio(); } }
+            ]
+        }];
         this.components.forEach((c, i) => {
             config.push({
                 type: 'row',
                 items: [
                     { type: 'text', label: `${i+1}_Hexa`, flex: '0.8' },
-                    { 
-                        type: 'select', value: c.searchMode, flex: '1.2',
-                        options: [
-                            { value: 'astar', label: 'A*' }, { value: 'dijkstra', label: 'Dijkstra' },
-                            { value: 'greedy', label: 'Greedy' }, { value: 'bfs', label: 'BFS' }, { value: 'dfs', label: 'DFS' }
-                        ],
-                        onChange: v => { c.searchMode = v; c.resetSearch(); this.draw(); }
-                    },
-                    {
-                        type: 'select', value: c.colorTheme, flex: '1.2',
-                        options: [
-                            { value: 'rainbow', label: 'Rainbow' }, { value: 'basic', label: 'Basic' },
-                            { value: 'ocean', label: 'Ocean' }, { value: 'sunset', label: 'Sunset' }, { value: 'neon', label: 'Neon' }
-                        ],
-                        onChange: v => { c.colorTheme = v; this.draw(); }
-                    },
-                    {
-                        type: 'button', label: c.active ? 'ON' : 'OFF', flex: '0.8',
-                        active: c.active,
-                        onClick: () => { c.active = !c.active; this.resize(); Core.updateControls(); }
-                    }
+                    { type: 'select', value: c.searchMode, flex: '1.2', options: [ { value: 'astar', label: 'A*' }, { value: 'dijkstra', label: 'Dijkstra' }, { value: 'greedy', label: 'Greedy' }, { value: 'bfs', label: 'BFS' }, { value: 'dfs', label: 'DFS' } ], onChange: v => { c.searchMode = v; c.resetSearch(); this.draw(); } },
+                    { type: 'select', value: c.colorTheme, flex: '1.2', options: [ { value: 'rainbow', label: 'Rainbow' }, { value: 'basic', label: 'Basic' }, { value: 'ocean', label: 'Ocean' }, { value: 'sunset', label: 'Sunset' }, { value: 'neon', label: 'Neon' } ], onChange: v => { c.colorTheme = v; this.draw(); } },
+                    { type: 'button', label: c.active ? 'ON' : 'OFF', flex: '0.8', active: c.active, onClick: () => { c.active = !c.active; this.resize(); Core.updateControls(); } }
                 ]
             });
         });
 
-        const c1 = this.components[0];
-        // 100% Sync with Single Mode Settings (Global)
-        config.push({ type: 'info', label: '--- Multi Global Settings ---', value: '' });
-        config.push({
-            type: 'select', id: 'pf_shape', label: 'Maze Shape', value: c1.mazeShape || 'random',
-            options: [
-                { value: 'random', label: 'Random (Default)' }, { value: 'heart', label: 'Heart Path' },
-                { value: 'star', label: 'Star Path' }, { value: 'infinity', label: 'Infinity (∞) Path' }, { value: 'spiral', label: 'Spiral Path' }
-            ],
-            onChange: v => { this.components.forEach(c => c.mazeShape = v); this.init(); }
-        });
-        config.push({
-            type: 'select', id: 'hex_sound_engine', label: 'Sound Engine', value: c1.audioMode || 'music',
-            options: [ { value: 'music', label: 'Default Music' }, { value: 'synth', label: 'Algorithm Synth' } ],
-            onChange: v => { this.components.forEach(c => c.audioMode = v); }
-        });
-        config.push({ 
-            type: 'slider', id: 'pf_speed', label: 'Search Speed', min: 1, max: 50, step: 1, 
-            value: MazeEngine.delayToSpeed(c1.searchDelayMs), 
-            onChange: v => { const d = MazeEngine.speedToDelay(v); this.components.forEach(c => c.searchDelayMs = d); } 
-        });
-        config.push({ 
-            type: 'slider', id: 'pf_sol_speed', label: 'Solution Speed', min: 1, max: 100, step: 1, 
-            value: c1.solutionSpeed, 
-            onChange: v => { this.components.forEach(c => c.solutionSpeed = v); } 
-        });
-        config.push({ 
-            type: 'slider', id: 'pf_sfx_volume', label: 'SFX Volume', min: 0, max: 1.0, step: 0.01, 
-            value: c1.sfxVolume, 
-            onChange: v => { this.components.forEach(c => c.sfxVolume = v); } 
-        });
-        config.push({ 
-            type: 'slider', id: 'pf_hex_size', label: 'Hex Size', min: 4, max: 28, step: 1, 
-            value: c1.hexSize, 
-            onChange: v => { this.components.forEach(c => c.hexSize = v); this.draw(); } 
-        });
-        config.push({ 
-            type: 'slider', id: 'pf_radius', label: 'Grid Radius', min: 8, max: 50, step: 1, 
-            value: c1.gridRadius, live: false, 
-            onChange: v => { this.components.forEach(c => { c.gridRadius = v; c.resetSearch(); }); this.init(); } 
-        });
-        config.push({ type: 'info', label: 'Start (Green)', value: 'Drag to Move' });
-        config.push({ type: 'info', label: 'Goal (Red)', value: 'Drag to Move' });
-        config.push({ type: 'info', label: 'Walls (Gray)', value: 'Drag to Edit' });
-
+        if (this.components[0]) {
+            const c1 = this.components[0];
+            config.push({ type: 'info', label: '--- Multi Global Settings ---', value: '' });
+            config.push({ type: 'select', id: 'pf_shape', label: 'Maze Shape', value: c1.mazeShape || 'random', options: [ { value: 'random', label: 'Random (Default)' }, { value: 'heart', label: 'Heart Path' }, { value: 'star', label: 'Star Path' }, { value: 'infinity', label: 'Infinity (∞) Path' }, { value: 'spiral', label: 'Spiral Path' } ], onChange: v => { this.components.forEach(c => c.mazeShape = v); this.init(); } });
+            config.push({ type: 'select', id: 'hex_sound_engine', label: 'Sound Engine', value: c1.audioMode || 'music', options: [ { value: 'music', label: 'Default Music' }, { value: 'synth', label: 'Algorithm Synth' } ], onChange: v => { this.components.forEach(c => c.audioMode = v); } });
+            config.push({ type: 'slider', id: 'pf_speed', label: 'Search Speed', min: 1, max: 50, step: 1, value: MazeEngine.delayToSpeed(c1.searchDelayMs), onChange: v => { const d = MazeEngine.speedToDelay(v); this.components.forEach(c => c.searchDelayMs = d); } });
+            config.push({ type: 'slider', id: 'pf_sol_speed', label: 'Solution Speed', min: 1, max: 100, step: 1, value: c1.solutionSpeed, onChange: v => { this.components.forEach(c => c.solutionSpeed = v); } });
+            config.push({ type: 'slider', id: 'pf_sfx_volume', label: 'SFX Volume', min: 0, max: 1.0, step: 0.01, value: c1.sfxVolume, onChange: v => { this.components.forEach(c => c.sfxVolume = v); } });
+            config.push({ type: 'slider', id: 'pf_hex_size', label: 'Hex Size', min: 4, max: 28, step: 1, value: c1.hexSize, onChange: v => { this.components.forEach(c => c.hexSize = v); this.draw(); } });
+            config.push({ type: 'slider', id: 'pf_radius', label: 'Grid Radius', min: 8, max: 50, step: 1, value: c1.gridRadius, live: false, onChange: v => { this.components.forEach(c => { c.gridRadius = v; c.resetSearch(); }); this.init(); } });
+        }
         return config;
     },
 
@@ -284,12 +277,11 @@ const MultiHexMazeCase = {
         if(!this.canvas) return;
         this.canvas.width = this.canvas.parentElement.clientWidth; this.canvas.height = this.canvas.parentElement.clientHeight;
         const activeUnits = this.components.filter(c => c.active);
-        const n = activeUnits.length; const isMobile = window.innerWidth < 768;
+        const n = activeUnits.length; const width = this.canvas.width; const height = this.canvas.height;
         activeUnits.forEach((c, i) => {
-            if (isMobile) { c.offsetX=0; c.offsetY=(this.canvas.height/n)*i; c.viewWidth=this.canvas.width; c.viewHeight=this.canvas.height/n; }
-            else if (n===1) { c.offsetX=0; c.offsetY=0; c.viewWidth=this.canvas.width; c.viewHeight=this.canvas.height; }
-            else if (n===2) { c.offsetX=(this.canvas.width/2)*i; c.offsetY=0; c.viewWidth=this.canvas.width/2; c.viewHeight=this.canvas.height; }
-            else { const col=i%2; const row=Math.floor(i/2); c.offsetX=(this.canvas.width/2)*col; c.offsetY=(this.canvas.height/2)*row; c.viewWidth=this.canvas.width/2; c.viewHeight=this.canvas.height/2; }
+            if (n === 1) { c.offsetX = 0; c.offsetY = 0; c.viewWidth = width; c.viewHeight = height; }
+            else if (n === 2) { if (width > height) { c.offsetX = (width / 2) * i; c.offsetY = 0; c.viewWidth = width / 2; c.viewHeight = height; } else { c.offsetX = 0; c.offsetY = (height / 2) * i; c.viewWidth = width; c.viewHeight = height / 2; } }
+            else { const col = i % 2; const row = Math.floor(i / 2); c.offsetX = (width / 2) * col; c.offsetY = (height / 2) * row; c.viewWidth = width / 2; c.viewHeight = height / 2; }
         });
         this.draw();
     },

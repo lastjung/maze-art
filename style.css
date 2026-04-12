@@ -691,38 +691,6 @@ body.hide-ui .canvas-container {
   max-height: none;
 }
 
-/* Floating Toggle Button */
-#ui-toggle-btn {
-  display: none;
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  z-index: 10000;
-  padding: 10px 16px;
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 8px;
-  cursor: pointer;
-  backdrop-filter: blur(4px);
-  font-family: var(--font-body);
-  font-size: 0.8rem;
-  transition: all 0.3s ease;
-}
-
-#ui-toggle-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-  color: #fff;
-}
-
-body.hide-ui #ui-toggle-btn {
-  display: block;
-  opacity: 0.85;
-}
-body.hide-ui #ui-toggle-btn:hover {
-  opacity: 1;
-}
-
 /* --- Universal Controls (Floating Dock & Settings) --- */
 
 /* Settings Panel */

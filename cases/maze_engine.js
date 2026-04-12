@@ -78,7 +78,7 @@ const MazeEngine = {
             frontier: '#a78bfa',    // Light Purple
             start: '#f97316',       // Orange
             goal: '#FF0000',        // Red
-            path: 'rgba(255, 255, 255, 0.25)', // Subtle white fill for cells
+            path: 'rgba(255, 0, 0, 0.5)',   // Increased visibility Red
             current: '#39ff14'                 // Neon Green for the path LINE
         },
         neon: {
@@ -297,7 +297,7 @@ const MazeEngine = {
         return this.audioCtx;
     },
 
-    playTone(freq, durationSec, type = 'sine', volumeMul = 1, attackSec = 0.003, contextData) {
+    playTone(freq, durationSec, type = 'sine', volumeMul = 1, attackSec = 0.003, contextData, pan = 0) {
         if (!contextData.sfxEnabled || contextData.sfxVolume <= 0) return;
         const ctx = this.ensureAudioContext(contextData.sfxEnabled);
         if (!ctx) return;
@@ -305,8 +305,11 @@ const MazeEngine = {
         const now = ctx.currentTime;
         const gain = ctx.createGain();
         const osc = ctx.createOscillator();
+        const panner = ctx.createStereoPanner();
+        
         osc.type = type;
         osc.frequency.value = freq;
+        panner.pan.value = pan;
 
         const peak = Math.max(0, Math.min(1, contextData.sfxVolume * volumeMul));
         gain.gain.setValueAtTime(0.0001, now);
@@ -314,7 +317,8 @@ const MazeEngine = {
         gain.gain.exponentialRampToValueAtTime(0.0001, now + durationSec);
 
         osc.connect(gain);
-        gain.connect(ctx.destination);
+        gain.connect(panner);
+        panner.connect(ctx.destination);
         osc.start(now);
         osc.stop(now + durationSec + 0.01);
     },
