@@ -164,7 +164,10 @@ const HexMazeCase = {
                     this.audioMode = v;
                     if (v === 'synth' || v === 'piano') {
                         if (window.audioManager) window.audioManager.pause();
-                        if (window.synthAudio) window.synthAudio.init();
+                        if (window.synthAudio) {
+                            window.synthAudio.init();
+                            if (window.synthAudio.ctx) window.synthAudio.ctx.resume();
+                        }
                     } else {
                         if (window.audioManager) window.audioManager.resume();
                     }
