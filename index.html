@@ -21,9 +21,10 @@
           <div class="tab-row">
             <div class="tab" data-case="hex-maze">Hexagon Maze</div>
             <div class="tab" data-case="multi-hex-maze">Multi Hex Maze</div>
+            <div class="tab" data-case="square-maze">Square Maze</div>
+            <div class="tab" data-case="multi-square-maze">Multi Square Maze</div>
             <div class="tab" data-case="fibonacci-maze">Fibonacci Maze</div>
             <div class="tab" data-case="circular">Circular Obstacles</div>
-            <div class="tab active" data-case="square-maze">Square Maze</div>
             <div class="tab" data-case="water-maze">Water Flow Maze</div>
             <div class="tab" id="tab-poly" data-case="polygon-maze">Polygon Maze</div>
             <div class="tab" id="tab-sphere" data-case="sphere-maze">Sphere Maze</div>
@@ -64,6 +65,7 @@
     <script src="cases/maze_engine.js"></script>
     <script src="cases/hex_maze.js"></script>
     <script src="cases/multi_hex_maze.js"></script>
+    <script src="cases/multi_square_maze.js"></script>
     <script src="cases/fibonacci_maze.js"></script>
     <script src="https://unpkg.com/delaunator@5.0.0/delaunator.min.js"></script>
     <script src="cases/circular_pathfinding.js"></script>
@@ -82,7 +84,8 @@
         'polygon-maze':    { title: 'Polygonal Voronoi Maze',      sub: 'Maze solving on an irregular polygonal grid.',            obj: () => PolygonMazeCase },
         'sphere-maze':     { title: 'Spherical Voronoi Maze',      sub: 'Maze solving on a rotating 3D-projected sphere.',         obj: () => SphereMazeCase },
         'sphere-face-maze':{ title: 'Goldberg Face Maze',          sub: 'Pathfinding by traversing polyhedron faces on a sphere.', obj: () => SphereFaceMazeCase },
-        'multi-hex-maze':  { title: 'Multi Hex Maze',              sub: 'Parallel pathfinding across shared hex maps.',           obj: () => MultiHexMazeCase }
+        'multi-hex-maze':  { title: 'Multi Hex Maze',              sub: 'Parallel pathfinding across shared hex maps.',           obj: () => MultiHexMazeCase },
+        'multi-square-maze':{ title: 'Multi Square Maze',           sub: 'Simultaneous search across identical square grids.',      obj: () => MultiSquareMazeCase }
       };
 
       function loadCaseByName(name) {

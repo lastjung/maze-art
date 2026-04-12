@@ -65,8 +65,8 @@ const MazeEngine = {
         },
         ocean: {
             wall: '#22d3ee',        // Cyan (Sky Blue)
-            explored: '#FFFF00',    // Pure Yellow
-            frontier: '#FFFF00',    // Pure Yellow
+            explored: '#06b6d4',    // Deep Cyan
+            frontier: '#22d3ee',    // Sky Blue Cyan
             start: '#0891b2',       // Dark Cyan
             goal: '#FF0000',        // Universal Red Goal
             path: 'rgba(255, 0, 0, 0.45)', // Red tinted path cells (Final Path 面)

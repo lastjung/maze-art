@@ -129,11 +129,12 @@ const FibonacciMazeCase = {
                 value: this.audioMode,
                 options: [
                     { value: 'music', label: 'Default Music' },
-                    { value: 'synth', label: 'Algorithm Synth' }
+                    { value: 'synth', label: 'Algorithm Synth' },
+                    { value: 'piano', label: 'Algorithm Piano' }
                 ],
                 onChange: (v) => {
                     this.audioMode = v;
-                    if (v === 'synth') {
+                    if (v === 'synth' || v === 'piano') {
                         if (window.audioManager) window.audioManager.pause();
                         if (window.synthAudio) window.synthAudio.init();
                     } else {
@@ -290,19 +291,20 @@ const FibonacciMazeCase = {
         this.lastStepSoundAt = now;
         this.stepSoundTick += 1;
 
-        if (this.audioMode === 'synth' && window.synthAudio && this.currentNode) {
+        if (this.audioMode === 'piano' && window.synthAudio && this.currentNode) {
             const stepDelayMs = this.searchDelayMs;
             const durationSec = Math.max(0.05, stepDelayMs / 1000.0);
-            const pt = { 
-                x: (this.currentNode.q / this.gridRadius), 
-                y: 0, 
-                z: 0 
-            };
-            window.synthAudio.triggerNote(pt, 0, 0, this.sfxVolume, durationSec);
+            const pt = { x: (this.currentNode.q / this.gridRadius), y: 0, z: 0 };
+            window.synthAudio.triggerPianoNote(pt, this.sfxVolume, durationSec);
+        } else if (this.audioMode === 'synth' && window.synthAudio && this.currentNode) {
+            const stepDelayMs = this.searchDelayMs;
+            const durationSec = Math.max(0.05, stepDelayMs / 1000.0);
+            const pt = { x: this.currentNode.q / this.gridRadius, y: 0, z: 0 };
+            window.synthAudio.triggerNote(pt, this.sfxVolume, durationSec);
         } else {
             if (this.stepSoundTick % 2 !== 0) return;
             const pitch = 240 + (this.stepSoundTick % 10) * 18;
-            MazeEngine.playTone(pitch, 0.05, 'triangle', 0.45, 0.003, this);
+            MazeEngine.playTone(pitch, 0.05, 'triangle', 0.6, 0.003, this);
         }
     },
 

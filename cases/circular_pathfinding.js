@@ -362,7 +362,12 @@ const CircularPathfindingCase = {
         this.lastStepSoundAt = now;
         this.stepSoundTick += 1;
 
-        if (this.config.audioMode === 'synth' && window.synthAudio && this.currentSearchNode) {
+        if (this.config.audioMode === 'piano' && window.synthAudio && this.currentSearchNode) {
+            const stepDelayMs = this.config.searchSpeedMs;
+            const durationSec = Math.max(0.05, stepDelayMs / 1000.0);
+            const pt = { x: (this.currentSearchNode.x / this.width) * 2 - 1, y: 0, z: 0 };
+            window.synthAudio.triggerPianoNote(pt, this.sfxVolume, durationSec);
+        } else if (this.config.audioMode === 'synth' && window.synthAudio && this.currentSearchNode) {
             const stepDelayMs = this.config.searchSpeedMs;
             const durationSec = Math.max(0.05, stepDelayMs / 1000.0);
             const pt = { 
@@ -370,7 +375,7 @@ const CircularPathfindingCase = {
                 y: 0, 
                 z: 0 
             };
-            window.synthAudio.triggerNote(pt, 0, 0, this.sfxVolume, durationSec);
+            window.synthAudio.triggerNote(pt, this.sfxVolume, durationSec);
         } else {
             if (this.stepSoundTick % 2 !== 0) return;
             const pitch = 220 + (this.stepSoundTick % 8) * 20;
@@ -1019,12 +1024,13 @@ const CircularPathfindingCase = {
                 value: this.config.audioMode,
                 options: [
                     { value: 'music', label: 'Default Music' },
-                    { value: 'synth', label: 'Algorithm Synth' }
+                    { value: 'synth', label: 'Algorithm Synth' },
+                    { value: 'piano', label: 'Algorithm Piano' }
                 ],
                 onChange: (v) => {
                     this.config.audioMode = v;
                     this.saveSettings();
-                    if (v === 'synth') {
+                    if (v === 'synth' || v === 'piano') {
                         if (window.audioManager) window.audioManager.pause();
                         if (window.synthAudio) window.synthAudio.init();
                     } else {

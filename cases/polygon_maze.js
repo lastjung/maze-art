@@ -113,11 +113,12 @@ const PolygonMazeCase = {
                 value: this.config.audioMode,
                 options: [
                     { value: 'music', label: 'Default Music' },
-                    { value: 'synth', label: 'Algorithm Synth' }
+                    { value: 'synth', label: 'Algorithm Synth' },
+                    { value: 'piano', label: 'Algorithm Piano' }
                 ],
                 onChange: (v) => {
                     this.config.audioMode = v;
-                    if (v === 'synth') {
+                    if (v === 'synth' || v === 'piano') {
                         if (window.audioManager) window.audioManager.pause();
                         if (window.synthAudio) window.synthAudio.init();
                     } else {
@@ -725,16 +726,20 @@ const PolygonMazeCase = {
         }
 
         // Sound
-        if (this.config.audioMode === 'synth' && window.synthAudio) {
-            const stepDelayMs = MazeEngine.speedToDelay(this.config.speed);
+        if (this.config.audioMode === 'piano' && window.synthAudio && this.currentNode) {
+            const stepDelayMs = this.config.searchDelayMs;
+            const durationSec = Math.max(0.05, stepDelayMs / 1000.0);
+            const pt = { x: (this.currentNode.centroid.x / this.width) * 2 - 1, y: 0, z: 0 };
+            window.synthAudio.triggerPianoNote(pt, this.config.sfxVolume, durationSec);
+        } else if (this.config.audioMode === 'synth' && window.synthAudio && this.currentNode) {
+            const stepDelayMs = this.config.searchDelayMs;
             const durationSec = Math.max(0.05, stepDelayMs / 1000.0);
             const pt = { 
-                x: (this.points[current].x / this.width) * 2 - 1, 
+                x: (this.currentNode.centroid.x / this.width) * 2 - 1, 
                 y: 0, 
                 z: 0 
             };
-            // Default sfx volume to 0.1 if not strictly defined in config
-            window.synthAudio.triggerNote(pt, 0, 0, this.config.sfxVolume || 0.1, durationSec);
+            window.synthAudio.triggerNote(pt, this.config.sfxVolume || 0.1, durationSec);
         } else {
             const dist = Math.sqrt((this.points[current].x - this.points[goal].x)**2 + (this.points[current].y - this.points[goal].y)**2);
             const freq = 200 + (1 - dist / this.width) * 800;

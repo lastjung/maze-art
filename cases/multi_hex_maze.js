@@ -78,13 +78,17 @@ class HexInstance {
             const idx = parseInt(this.id.split(' ')[1]) - 1 || 0;
             const pan = (this.offsetX < this.ctx.canvas.width / 3) ? -0.5 : (this.offsetX > this.ctx.canvas.width / 2) ? 0.5 : 0;
             
-            if (window.synthAudio && this.audioMode === 'synth') {
+            if (window.synthAudio && (this.audioMode === 'synth' || this.audioMode === 'piano')) {
                 const pt = { x: (this.currentNode ? this.currentNode.q / this.gridRadius : pan), y: 0, z: 0 };
-                window.synthAudio.triggerNote(pt, 0, 0, this.sfxVolume * 0.2, 0.15);
+                if (this.audioMode === 'piano') {
+                    window.synthAudio.triggerPianoNote(pt, this.sfxVolume * 0.2, 1.2);
+                } else {
+                    window.synthAudio.triggerNote(pt, this.sfxVolume * 0.2, 0.15);
+                }
             } else {
                 const baseFreq = 200 + (idx * 100);
                 const freq = baseFreq + (this.exploredSet.size % 40) * 12;
-                MazeEngine.playTone(freq, 0.05, 'triangle', 0.15 * this.sfxVolume, 0.003, this, pan);
+                MazeEngine.playTone(freq, 0.05, 'triangle', 0.25 * this.sfxVolume, 0.003, this, pan);
             }
         }
 
@@ -239,14 +243,7 @@ const MultiHexMazeCase = {
     },
 
     get uiConfig() {
-        const config = [{
-            type: 'button-group',
-            buttons: [
-                { id: 'btn_go', label: (this.searchInProgress && !this.searchPaused) ? 'Hold' : (this.searchPaused ? 'Resume' : 'Go'), onClick: () => { Core.togglePlay(); } },
-                { id: 'btn_reset', label: 'Reset', onClick: () => { Core.resetCase(); } },
-                { id: 'btn_sound', label: (typeof Core !== 'undefined' && Core.isAudioEnabled) ? 'Sound ON' : 'Sound OFF', onClick: () => { Core.toggleAudio(); } }
-            ]
-        }];
+        const config = [];
         this.components.forEach((c, i) => {
             config.push({
                 type: 'row',
@@ -263,7 +260,7 @@ const MultiHexMazeCase = {
             const c1 = this.components[0];
             config.push({ type: 'info', label: '--- Multi Global Settings ---', value: '' });
             config.push({ type: 'select', id: 'pf_shape', label: 'Maze Shape', value: c1.mazeShape || 'random', options: [ { value: 'random', label: 'Random (Default)' }, { value: 'heart', label: 'Heart Path' }, { value: 'star', label: 'Star Path' }, { value: 'infinity', label: 'Infinity (∞) Path' }, { value: 'spiral', label: 'Spiral Path' } ], onChange: v => { this.components.forEach(c => c.mazeShape = v); this.init(); } });
-            config.push({ type: 'select', id: 'hex_sound_engine', label: 'Sound Engine', value: c1.audioMode || 'music', options: [ { value: 'music', label: 'Default Music' }, { value: 'synth', label: 'Algorithm Synth' } ], onChange: v => { this.components.forEach(c => c.audioMode = v); } });
+            config.push({ type: 'select', id: 'hex_sound_engine', label: 'Sound Engine', value: c1.audioMode || 'music', options: [ { value: 'music', label: 'Default Music' }, { value: 'synth', label: 'Algorithm Synth' }, { value: 'piano', label: 'Algorithm Piano' } ], onChange: v => { this.components.forEach(c => c.audioMode = v); } });
             config.push({ type: 'slider', id: 'pf_speed', label: 'Search Speed', min: 1, max: 50, step: 1, value: MazeEngine.delayToSpeed(c1.searchDelayMs), onChange: v => { const d = MazeEngine.speedToDelay(v); this.components.forEach(c => c.searchDelayMs = d); } });
             config.push({ type: 'slider', id: 'pf_sol_speed', label: 'Solution Speed', min: 1, max: 100, step: 1, value: c1.solutionSpeed, onChange: v => { this.components.forEach(c => c.solutionSpeed = v); } });
             config.push({ type: 'slider', id: 'pf_sfx_volume', label: 'SFX Volume', min: 0, max: 1.0, step: 0.01, value: c1.sfxVolume, onChange: v => { this.components.forEach(c => c.sfxVolume = v); } });

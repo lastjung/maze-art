@@ -116,11 +116,12 @@ const SquareMazeCase = {
                 value: this.audioMode,
                 options: [
                     { value: 'music', label: 'Default Music' },
-                    { value: 'synth', label: 'Algorithm Synth' }
+                    { value: 'synth', label: 'Algorithm Synth' },
+                    { value: 'piano', label: 'Algorithm Piano' }
                 ],
                 onChange: (v) => {
                     this.audioMode = v;
-                    if (v === 'synth') {
+                    if (v === 'synth' || v === 'piano') {
                         if (window.audioManager) window.audioManager.pause();
                         if (window.synthAudio) window.synthAudio.init();
                     } else {
@@ -398,7 +399,12 @@ const SquareMazeCase = {
         this.stepSoundTick += 1;
         
         // For standard tone, we used to skip ticks. But for synth melody, we play every step (or scaled).
-        if (this.audioMode === 'synth' && window.synthAudio && this.currentNode) {
+        if (this.audioMode === 'piano' && window.synthAudio && this.currentNode) {
+            const stepDelayMs = this.searchDelayMs;
+            const durationSec = Math.max(0.05, stepDelayMs / 1000.0);
+            const pt = { x: (this.currentNode.x / this.cols) * 2 - 1, y: 0, z: 0 };
+            window.synthAudio.triggerPianoNote(pt, this.sfxVolume, durationSec);
+        } else if (this.audioMode === 'synth' && window.synthAudio && this.currentNode) {
             const stepDelayMs = this.searchDelayMs;
             const durationSec = Math.max(0.05, stepDelayMs / 1000.0);
             const pt = { 
@@ -406,11 +412,11 @@ const SquareMazeCase = {
                 y: 0, 
                 z: 0 
             };
-            window.synthAudio.triggerNote(pt, 0, 0, this.sfxVolume, durationSec);
+            window.synthAudio.triggerNote(pt, this.sfxVolume, durationSec);
         } else {
             if (this.stepSoundTick % 2 !== 0) return;
             const pitch = 220 + (this.stepSoundTick % 10) * 16;
-            MazeEngine.playTone(pitch, 0.05, 'triangle', 0.45, 0.003, this);
+            MazeEngine.playTone(pitch, 0.05, 'triangle', 0.6, 0.003, this);
         }
     },
 

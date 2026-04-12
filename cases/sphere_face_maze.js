@@ -344,11 +344,12 @@ const SphereFaceMazeCase = {
                 value: this.config.audioMode,
                 options: [
                     { value: 'music', label: 'Default Music' },
-                    { value: 'synth', label: 'Algorithm Synth' }
+                    { value: 'synth', label: 'Algorithm Synth' },
+                    { value: 'piano', label: 'Algorithm Piano' }
                 ],
                 onChange: (v) => {
                     this.config.audioMode = v;
-                    if (v === 'synth') {
+                    if (v === 'synth' || v === 'piano') {
                         if (window.audioManager) window.audioManager.pause();
                         if (window.synthAudio) window.synthAudio.init();
                     } else {
@@ -1364,10 +1365,14 @@ const SphereFaceMazeCase = {
         }
 
         // Sound
-        if (this.config.audioMode === 'synth' && window.synthAudio) {
-            const stepDelayMs = MazeEngine.speedToDelay(this.config.speed);
+        if (this.config.audioMode === 'piano' && window.synthAudio && this.currentNodeIndex !== -1) {
+            const stepDelayMs = this.config.searchDelayMs;
             const durationSec = Math.max(0.05, stepDelayMs / 1000.0);
-            window.synthAudio.triggerNote(this.points[current], this.rotX, this.rotY, this.config.sfxVolume, durationSec);
+            window.synthAudio.triggerPianoNote(this.points[this.currentNodeIndex], this.config.sfxVolume, durationSec);
+        } else if (this.config.audioMode === 'synth' && window.synthAudio && this.currentNodeIndex !== -1) {
+            const stepDelayMs = this.config.searchDelayMs;
+            const durationSec = Math.max(0.05, stepDelayMs / 1000.0);
+            window.synthAudio.triggerNote(this.points[this.currentNodeIndex], this.config.sfxVolume, durationSec);
         } else {
             const dist = Math.sqrt((this.points[current].x - this.points[goal].x)**2 + (this.points[current].y - this.points[goal].y)**2 + (this.points[current].z - this.points[goal].z)**2);
             const freq = 300 + (1 - dist / 2) * 700;
