@@ -9,7 +9,7 @@ const Core = {
     idleTimer: null,
     IDLE_TIMEOUT: 3 * 60 * 1000,
     isRecordingMode: false,
-    isRunning: true,
+    isRunning: false,
     currentCaseMode: 'display',
 
     init() {
@@ -255,6 +255,41 @@ const Core = {
                     select.onchange = (e) => {
                         if (ctrl.onChange) ctrl.onChange(e.target.value);
                     };
+                } else if (ctrl.type === 'button-group') {
+                    row.style.display = 'grid';
+                    row.style.gridTemplateColumns = `repeat(${ctrl.buttons.length}, 1fr)`;
+                    row.style.gap = '8px';
+                    row.style.marginTop = '4px';
+                    ctrl.buttons.forEach(b => {
+                        const btn = document.createElement('button');
+                        btn.className = 'btn-primary'; btn.id = b.id; btn.textContent = b.label;
+                        btn.style.padding = '10px 0'; btn.style.fontSize = '0.8rem';
+                        btn.onclick = () => { if (b.onClick) b.onClick(); };
+                        row.appendChild(btn);
+                    });
+                    panel.appendChild(row);
+                } else if (ctrl.type === 'row') {
+                    row.style.display = 'grid';
+                    row.style.gridTemplateColumns = '0.7fr 1.2fr 1.2fr 0.8fr';
+                    row.style.gap = '8px'; row.style.alignItems = 'center';
+                    ctrl.items.forEach(sub => {
+                        const cell = document.createElement('div');
+                        if (sub.type === 'select') {
+                            const sel = document.createElement('select'); sel.className = 'setting-select'; sel.style.width = '100%';
+                            sel.innerHTML = sub.options.map(o => `<option value="${o.value}" ${o.value === sub.value ? 'selected' : ''}>${o.label}</option>`).join('');
+                            sel.onchange = (e) => sub.onChange(e.target.value); cell.appendChild(sel);
+                        } else if (sub.type === 'button') {
+                            const btn = document.createElement('button');
+                            btn.className = sub.active ? 'btn-primary active' : 'btn-primary';
+                            btn.textContent = sub.label; btn.style.width = '100%'; btn.style.padding = '8px 0'; btn.style.fontSize = '10px';
+                            btn.onclick = () => sub.onClick(); cell.appendChild(btn);
+                        } else if (sub.type === 'text') {
+                            const span = document.createElement('span'); span.textContent = sub.label;
+                            span.style.fontSize = '11px'; span.style.fontWeight = '600'; cell.appendChild(span);
+                        }
+                        row.appendChild(cell);
+                    });
+                    panel.appendChild(row);
                 } else if (ctrl.type === 'info') {
                     row.classList.add('setting-item-info');
                     row.innerHTML = `
@@ -329,14 +364,10 @@ const Core = {
     resetCase() {
         if (this.currentCase && this.currentCase.reset) {
             this.currentCase.reset();
-            // Auto-play on reset unless case forbids it
-            if (!this.isRunning && this.currentCase.autoPlayOnReset !== false) {
-                 this.togglePlay();
-            } else {
-                 this.syncPlayButton();
-            }
+            this.isRunning = false;
+            this.syncPlayButton();
             if (window.audioManager) {
-                window.audioManager.syncWithPlaybackState(this.isRunning);
+                window.audioManager.syncWithPlaybackState(false);
             }
             this.updateControls();
         }
@@ -480,8 +511,8 @@ const Core = {
         }
         this.syncAudioButton();
         
-        // Reset Play State (case can opt-in to paused start)
-        this.isRunning = this.currentCase.startPausedOnLoad === true ? false : true;
+        // Reset Play State (default to stopped)
+        this.isRunning = false;
 
         if (this.isRunning && this.currentCase.start) {
             this.currentCase.start();
