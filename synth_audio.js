@@ -38,7 +38,7 @@ class SynthAudio {
             this.ctx = new AudioContext();
             
             this.masterGain = this.ctx.createGain();
-            this.masterGain.gain.value = 0.9; 
+            this.masterGain.gain.value = 0.6; // Final balanced volume
 
             this.lowPass = this.ctx.createBiquadFilter();
             this.lowPass.type = 'lowpass';
@@ -74,8 +74,9 @@ class SynthAudio {
         console.log(`Melody Switched: Bank ${this.bankIndex}, Transpose: ${semitones}st`);
     }
 
-    triggerNote(pt, rotX, rotY, volume = 0.1, durationSec = 0.15) {
+    triggerNote(pt, rotX, rotY, volume = 0.05, durationSec = 0.15) {
         if (!this.isInitialized) this.init();
+        if (typeof Core !== 'undefined' && !Core.isAudioEnabled) return; // Mute check
         if (this.ctx.state === 'suspended') this.ctx.resume();
 
         const now = this.ctx.currentTime;
@@ -124,4 +125,3 @@ class SynthAudio {
 }
 
 window.synthAudio = new SynthAudio();
-
